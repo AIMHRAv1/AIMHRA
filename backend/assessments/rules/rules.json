@@ -1,0 +1,54 @@
+{
+  "version": "v1",
+  "note": "Deterministic emergency-escalation rules. These thresholds are configurable project defaults aligned with widely used clinical guidance ranges (e.g. severe-hypertension thresholds and obstetric danger signs). They MUST be reviewed and approved by qualified clinical stakeholders before any real-world deployment. Actions are escalation prompts, never diagnoses or treatment instructions.",
+  "categories": {
+    "NORMAL": "No rule triggered",
+    "ATTENTION": "Monitor / mention to a clinician at the next contact",
+    "HIGH_CONCERN": "Contact a healthcare professional promptly",
+    "EMERGENCY": "Seek emergency medical care immediately"
+  },
+  "symptom_vocabulary": [
+    "vaginal_bleeding",
+    "severe_headache",
+    "blurred_vision",
+    "convulsions",
+    "severe_abdominal_pain",
+    "fever",
+    "decreased_fetal_movement",
+    "swelling_face_hands",
+    "difficulty_breathing",
+    "persistent_vomiting",
+    "dizziness_fainting",
+    "none"
+  ],
+  "rules": [
+    {"id": "EMER-CONVULSIONS", "category": "EMERGENCY", "type": "symptom", "match": "convulsions", "description": "Reported convulsions/fits"},
+    {"id": "EMER-BLEEDING", "category": "EMERGENCY", "type": "symptom", "match": "vaginal_bleeding", "description": "Reported vaginal bleeding"},
+    {"id": "EMER-BREATHING", "category": "EMERGENCY", "type": "symptom", "match": "difficulty_breathing", "description": "Reported difficulty breathing"},
+    {"id": "EMER-BP-HIGH", "category": "EMERGENCY", "type": "vital", "feature": "systolic_bp", "op": ">=", "value": 160, "description": "Systolic blood pressure >= 160 mmHg (severe hypertension range)"},
+    {"id": "EMER-BP-DIA", "category": "EMERGENCY", "type": "vital", "feature": "diastolic_bp", "op": ">=", "value": 110, "description": "Diastolic blood pressure >= 110 mmHg (severe hypertension range)"},
+    {"id": "EMER-TEMP", "category": "EMERGENCY", "type": "vital", "feature": "body_temperature", "op": ">=", "value": 104.0, "description": "Body temperature >= 104 F (very high fever)"},
+    {"id": "EMER-HR-HIGH", "category": "EMERGENCY", "type": "vital", "feature": "heart_rate", "op": ">=", "value": 140, "description": "Heart rate >= 140 bpm at rest"},
+    {"id": "HC-HEADACHE", "category": "HIGH_CONCERN", "type": "symptom", "match": "severe_headache", "description": "Severe/persistent headache"},
+    {"id": "HC-VISION", "category": "HIGH_CONCERN", "type": "symptom", "match": "blurred_vision", "description": "Blurred vision or visual disturbance"},
+    {"id": "HC-ABDOMINAL", "category": "HIGH_CONCERN", "type": "symptom", "match": "severe_abdominal_pain", "description": "Severe abdominal pain"},
+    {"id": "HC-FETAL-MOVEMENT", "category": "HIGH_CONCERN", "type": "symptom", "match": "decreased_fetal_movement", "description": "Decreased fetal movement"},
+    {"id": "HC-SWELLING", "category": "HIGH_CONCERN", "type": "symptom", "match": "swelling_face_hands", "description": "Swelling of face and/or hands"},
+    {"id": "HC-BP-SYS", "category": "HIGH_CONCERN", "type": "vital", "feature": "systolic_bp", "op": ">=", "value": 140, "description": "Systolic blood pressure >= 140 mmHg (hypertension range)"},
+    {"id": "HC-BP-DIA", "category": "HIGH_CONCERN", "type": "vital", "feature": "diastolic_bp", "op": ">=", "value": 90, "description": "Diastolic blood pressure >= 90 mmHg (hypertension range)"},
+    {"id": "HC-HR-HIGH", "category": "HIGH_CONCERN", "type": "vital", "feature": "heart_rate", "op": ">=", "value": 120, "description": "Heart rate >= 120 bpm"},
+    {"id": "HC-FEVER", "category": "HIGH_CONCERN", "type": "vital", "feature": "body_temperature", "op": ">=", "value": 100.4, "description": "Body temperature >= 100.4 F (fever)"},
+    {"id": "ATT-VOMITING", "category": "ATTENTION", "type": "symptom", "match": "persistent_vomiting", "description": "Persistent vomiting"},
+    {"id": "ATT-DIZZINESS", "category": "ATTENTION", "type": "symptom", "match": "dizziness_fainting", "description": "Dizziness or fainting"},
+    {"id": "ATT-FEVER-SYMPTOM", "category": "ATTENTION", "type": "symptom", "match": "fever", "description": "Self-reported fever"},
+    {"id": "ATT-HR-LOW", "category": "ATTENTION", "type": "vital", "feature": "heart_rate", "op": "<", "value": 55, "description": "Heart rate < 55 bpm"},
+    {"id": "ATT-BMI-LOW", "category": "ATTENTION", "type": "vital", "feature": "bmi", "op": "<", "value": 18.5, "description": "BMI below 18.5 (configurable default)"},
+    {"id": "ATT-BMI-HIGH", "category": "ATTENTION", "type": "vital", "feature": "bmi", "op": ">=", "value": 30.0, "description": "BMI 30 or above (configurable default)"}
+  ],
+  "messages": {
+    "EMERGENCY": "One or more emergency warning conditions were detected. Please seek emergency medical care immediately or have someone take you to the nearest emergency facility. Do not wait. This system cannot provide emergency care.",
+    "HIGH_CONCERN": "Warning signs were detected that should be assessed by a healthcare professional promptly. Please contact your clinic or midwife today.",
+    "ATTENTION": "Some findings should be mentioned to a healthcare professional at your next contact.",
+    "NORMAL": "No warning-rule conditions were detected in the entered information."
+  }
+}

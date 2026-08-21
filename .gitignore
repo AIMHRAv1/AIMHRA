@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Django
+backend/.env
+backend/db.sqlite3
+backend/logs/
+backend/staticfiles/
+backend/media/
+backend/ml_artifacts/
+
+# Data generated at runtime (keep the dataset + dataset_report)
+backend/data/synthetic_*.csv
+backend/data/synthetic_*.json
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

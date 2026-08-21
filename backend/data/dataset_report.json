@@ -1,0 +1,179 @@
+{
+  "dataset": "D:\\project\\AIMHRA\\AIMHRA\\v1\\backend\\data\\Mathernal_Risk.csv",
+  "md5": "6ad779f622f39cc28646d92a01270dab",
+  "rows": 6103,
+  "columns": 11,
+  "feature_names": [
+    "Patient ID",
+    "Name",
+    "age",
+    "body_temperature",
+    "heart_rate",
+    "systolic_bp",
+    "diastolic_bp",
+    "bmi",
+    "hba1c",
+    "fasting_glucose",
+    "risk_level"
+  ],
+  "dtypes": {
+    "Patient ID": "int64",
+    "Name": "str",
+    "age": "int64",
+    "body_temperature": "float64",
+    "heart_rate": "int64",
+    "systolic_bp": "int64",
+    "diastolic_bp": "int64",
+    "bmi": "float64",
+    "hba1c": "int64",
+    "fasting_glucose": "float64",
+    "risk_level": "str"
+  },
+  "missing_values": {},
+  "class_distribution": {
+    "high risk": 2059,
+    "mid risk": 2043,
+    "low risk": 2001
+  },
+  "target_labels": [
+    "low risk",
+    "mid risk",
+    "high risk"
+  ],
+  "constant_features": [],
+  "near_empty_features": [],
+  "temporal_visit_fields": [],
+  "feature_selection": {
+    "SAFE_FEATURES": [
+      "age",
+      "body_temperature",
+      "heart_rate",
+      "systolic_bp",
+      "diastolic_bp",
+      "bmi",
+      "hba1c",
+      "fasting_glucose"
+    ],
+    "LEAKAGE_FEATURES": [],
+    "UNUSED_FEATURES": {
+      "Patient ID": "Row identifier \u2014 not a clinical measurement; would not generalize.",
+      "Name": "Free-text PII \u2014 not predictive; excluded for privacy and generalization."
+    },
+    "leakage_review": "No post-outcome columns exist in this dataset; all SAFE_FEATURES are point-of-assessment measurements. Identifiers excluded as UNUSED."
+  },
+  "plausibility_ranges": {
+    "age": [
+      14,
+      55
+    ],
+    "body_temperature": [
+      95.0,
+      106.0
+    ],
+    "heart_rate": [
+      40,
+      200
+    ],
+    "systolic_bp": [
+      70,
+      250
+    ],
+    "diastolic_bp": [
+      40,
+      150
+    ],
+    "bmi": [
+      12.0,
+      60.0
+    ],
+    "hba1c": [
+      20.0,
+      60.0
+    ],
+    "fasting_glucose": [
+      2.0,
+      20.0
+    ]
+  },
+  "notes": [
+    "Glucose column units are inconsistent with their headers; values used as-is.",
+    "Implausible training rows (outside PLAUSIBILITY_RANGES) are dropped and counted in the inspection report.",
+    "Exact duplicate feature+label rows are dropped before splitting to avoid optimistic test estimates."
+  ],
+  "validation": {
+    "rows": 6103,
+    "columns": 11,
+    "class_distribution": {
+      "high risk": 2059,
+      "mid risk": 2043,
+      "low risk": 2001
+    },
+    "missing_values": {}
+  },
+  "cleaning": {
+    "rows_in": 6103,
+    "exact_duplicates_dropped": 1,
+    "implausible_rows_dropped_by_feature": {
+      "age": 1,
+      "body_temperature": 43,
+      "diastolic_bp": 1
+    },
+    "implausible_rows_dropped_total": 45,
+    "rows_out": 6057,
+    "class_distribution_out": {
+      "mid risk": 2043,
+      "high risk": 2016,
+      "low risk": 1998
+    }
+  },
+  "numeric_summary": {
+    "age": {
+      "min": 15.0,
+      "max": 250.0,
+      "mean": 26.425,
+      "unique": 35
+    },
+    "body_temperature": {
+      "min": 39.6,
+      "max": 104.0,
+      "mean": 98.666,
+      "unique": 104
+    },
+    "heart_rate": {
+      "min": 45.0,
+      "max": 150.0,
+      "mean": 86.101,
+      "unique": 106
+    },
+    "systolic_bp": {
+      "min": 90.0,
+      "max": 169.0,
+      "mean": 129.218,
+      "unique": 79
+    },
+    "diastolic_bp": {
+      "min": 9.0,
+      "max": 142.0,
+      "mean": 87.258,
+      "unique": 65
+    },
+    "bmi": {
+      "min": 14.9,
+      "max": 27.9,
+      "mean": 21.436,
+      "unique": 127
+    },
+    "hba1c": {
+      "min": 30.0,
+      "max": 50.0,
+      "mean": 37.904,
+      "unique": 21
+    },
+    "fasting_glucose": {
+      "min": 3.5,
+      "max": 8.9,
+      "mean": 5.505,
+      "unique": 49
+    }
+  }
+}
