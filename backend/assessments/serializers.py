@@ -71,11 +71,12 @@ class AssessmentSerializer(serializers.ModelSerializer):
 
 class AlertSerializer(serializers.ModelSerializer):
     patient_code = serializers.CharField(source="patient.patient_code", read_only=True)
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
 
     class Meta:
         model = Alert
         fields = [
-            "id", "assessment", "patient", "patient_code", "category", "rule_id",
+            "id", "assessment", "patient", "patient_code", "patient_name", "category", "rule_id",
             "rule_description", "message", "rules_version", "status", "created_at",
         ]
 

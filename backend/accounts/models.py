@@ -5,21 +5,18 @@ from django.db import models
 class User(AbstractUser):
     """Application user with a single role.
 
-    PATIENT: enters assessments, sees own data only.
-    HEALTHCARE_WORKER: sees patients explicitly assigned to them.
-    ADMIN: manages users, models, knowledge base, audit logs.
+    HEALTHCARE_WORKER: manages patient records, assessments, alerts and reports.
+    ADMIN: manages users, models, knowledge base, audit logs and all patient data.
     """
 
-    ROLE_PATIENT = "PATIENT"
     ROLE_HEALTHCARE_WORKER = "HEALTHCARE_WORKER"
     ROLE_ADMIN = "ADMIN"
     ROLE_CHOICES = (
-        (ROLE_PATIENT, "Patient"),
         (ROLE_HEALTHCARE_WORKER, "Healthcare worker"),
         (ROLE_ADMIN, "Administrator"),
     )
 
-    role = models.CharField(max_length=32, choices=ROLE_CHOICES, default=ROLE_PATIENT)
+    role = models.CharField(max_length=32, choices=ROLE_CHOICES, default=ROLE_HEALTHCARE_WORKER)
     phone = models.CharField(max_length=32, blank=True, default="")
     # Required on registration so admins can review who signed up.
     full_name = models.CharField(max_length=128, blank=True, default="")

@@ -1,0 +1,842 @@
+2026-09-03 11:37:58,468 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-03 11:38:12,276 WARNING django.request Not Found: /
+2026-09-03 11:38:12,381 WARNING django.request Not Found: /favicon.ico
+2026-09-03 11:39:46,247 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 11:39:46,259 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 11:39:46,261 WARNING django.request Unauthorized: /api/auth/refresh/
+2026-09-03 11:40:05,398 ERROR django.request Service Unavailable: /api/models/feature-importance/
+2026-09-03 11:40:05,409 ERROR django.request Service Unavailable: /api/models/feature-importance/
+2026-09-03 12:20:08,389 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 12:20:08,400 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 13:20:01,838 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 13:20:01,851 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 14:46:58,977 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 14:46:58,986 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 16:17:55,412 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 16:17:55,417 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 16:51:24,519 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 16:51:24,523 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 18:09:09,951 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 18:09:09,957 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 20:38:53,373 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 20:38:53,380 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 21:34:18,866 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 21:34:18,875 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 22:34:12,236 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-03 22:34:12,246 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 13:10:00,919 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:10:01,185 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:10:01,188 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:10:01,478 WARNING django.request Unauthorized: /api/auth/login/
+2026-09-06 13:10:01,481 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:10:01,723 WARNING django.request Unauthorized: /api/auth/login/
+2026-09-06 13:10:01,726 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:10:01,730 WARNING django.request Unauthorized: /api/patients/me/
+2026-09-06 13:10:01,732 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:10:01,734 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:10:01,736 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:10:01,738 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:29,276 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:29,624 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:29,626 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:29,917 WARNING django.request Unauthorized: /api/auth/login/
+2026-09-06 13:14:29,920 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:30,172 WARNING django.request Unauthorized: /api/auth/login/
+2026-09-06 13:14:30,175 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:30,178 WARNING django.request Unauthorized: /api/patients/me/
+2026-09-06 13:14:30,179 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:30,180 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:30,181 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:30,182 WARNING django.request Unauthorized: /api/auth/register/
+2026-09-06 13:14:30,208 INFO mlcore.training Dataset cleaned: {'rows_in': 6103, 'exact_duplicates_dropped': 1, 'implausible_rows_dropped_by_feature': {'age': 1, 'body_temperature': 43, 'diastolic_bp': 1}, 'implausible_rows_dropped_total': 45, 'rows_out': 6057, 'class_distribution_out': {'mid risk': 2043, 'high risk': 2016, 'low risk': 1998}}
+2026-09-06 13:14:30,343 INFO mlcore.training RandomForest trained in 0.11s | test f1_macro=0.9912 high_risk_recall=0.9934
+2026-09-06 13:14:30,848 INFO mlcore.training XGBoost trained in 0.5s | test f1_macro=0.9570 high_risk_recall=0.9238
+2026-09-06 13:14:31,867 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:31,873 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:31,879 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:31,882 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:31,883 WARNING django.request Forbidden: /api/assessments/risk-history/
+2026-09-06 13:14:31,891 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:31,896 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:31,899 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:31,903 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:31,906 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:31,913 WARNING django.request Forbidden: /api/assessments/risk-history/
+2026-09-06 13:14:31,915 WARNING django.request Forbidden: /api/assessments/
+2026-09-06 13:14:32,487 WARNING django.request Forbidden: /api/chat/sessions/
+2026-09-06 13:14:32,490 WARNING django.request Forbidden: /api/chat/sessions/
+2026-09-06 13:14:32,493 WARNING django.request Forbidden: /api/chat/sessions/
+2026-09-06 13:14:32,497 WARNING django.request Forbidden: /api/chat/sessions/
+2026-09-06 13:14:32,500 WARNING django.request Forbidden: /api/chat/sessions/
+2026-09-06 13:14:32,503 WARNING django.request Forbidden: /api/chat/sessions/
+2026-09-06 13:14:32,506 WARNING django.request Forbidden: /api/chat/sessions/
+2026-09-06 13:14:32,508 WARNING django.request Forbidden: /api/chat/sessions/
+2026-09-06 13:14:32,535 INFO kb.services.embeddings Local TF-IDF embedding backend fitted on 1 chunks
+2026-09-06 13:14:32,537 INFO kb.services.indexing Indexed Iron: 1 chunks
+2026-09-06 13:14:33,065 INFO kb.services.embeddings Local TF-IDF embedding backend fitted on 1 chunks
+2026-09-06 13:14:33,068 INFO kb.services.indexing Indexed Doc: 1 chunks
+2026-09-06 13:14:33,073 WARNING django.request Forbidden: /api/rag/documents/
+2026-09-06 13:14:33,087 INFO kb.services.embeddings Local TF-IDF embedding backend fitted on 1 chunks
+2026-09-06 13:14:33,089 INFO kb.services.indexing Indexed Iron Guidance: 1 chunks
+2026-09-06 13:14:33,098 INFO kb.services.embeddings Local TF-IDF embedding backend fitted on 1 chunks
+2026-09-06 13:14:33,100 INFO kb.services.indexing Indexed Iron Guidance: 1 chunks
+2026-09-06 13:14:33,191 INFO mlcore.training Dataset cleaned: {'rows_in': 6103, 'exact_duplicates_dropped': 1, 'implausible_rows_dropped_by_feature': {'age': 1, 'body_temperature': 43, 'diastolic_bp': 1}, 'implausible_rows_dropped_total': 45, 'rows_out': 6057, 'class_distribution_out': {'mid risk': 2043, 'high risk': 2016, 'low risk': 1998}}
+2026-09-06 13:14:33,334 INFO mlcore.training RandomForest trained in 0.13s | test f1_macro=0.9912 high_risk_recall=0.9934
+2026-09-06 13:14:33,408 INFO mlcore.training XGBoost trained in 0.07s | test f1_macro=0.9570 high_risk_recall=0.9238
+2026-09-06 13:14:56,752 INFO mlcore.training Dataset cleaned: {'rows_in': 6103, 'exact_duplicates_dropped': 1, 'implausible_rows_dropped_by_feature': {'age': 1, 'body_temperature': 43, 'diastolic_bp': 1}, 'implausible_rows_dropped_total': 45, 'rows_out': 6057, 'class_distribution_out': {'mid risk': 2043, 'high risk': 2016, 'low risk': 1998}}
+2026-09-06 13:14:56,932 INFO mlcore.training RandomForest trained in 0.17s | test f1_macro=0.9912 high_risk_recall=0.9934
+2026-09-06 13:14:57,014 INFO mlcore.training XGBoost trained in 0.08s | test f1_macro=0.9570 high_risk_recall=0.9238
+2026-09-06 13:14:57,935 WARNING django.request Forbidden: /api/reports/1/download/
+2026-09-06 13:16:07,685 INFO notifications.services SMS sandbox: would send to 9800000000: Test alert
+2026-09-06 13:18:03,160 WARNING django.request Forbidden: /api/patients/1/
+2026-09-06 13:18:04,222 INFO notifications.services SMS sandbox: would send to 9800000000: Test alert
+2026-09-06 13:20:15,490 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 13:21:22,107 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 13:21:22,115 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 13:22:33,340 WARNING django.request Unauthorized: /api/auth/login/
+2026-09-06 13:22:33,846 WARNING django.request Unauthorized: /api/auth/login/
+2026-09-06 13:22:58,292 ERROR core.middleware Unhandled exception on GET /admin/accounts/user/
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\core\handlers\base.py", line 220, in _get_response
+    response = response.render()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 114, in render
+    self.content = self.rendered_content
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 92, in rendered_content
+    return template.render(context, self._request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\backends\django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 171, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\templatetags\base.py", line 45, in render
+    return super().render(context)
+           ~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\library.py", line 273, in render
+    new_context = context.new(_dict)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 275, in new
+    new_context = super().new(values)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 112, in new
+    new_context = copy(self)
+  File "C:\Users\janam\AppData\Local\Python\pythoncore-3.14-64\Lib\copy.py", line 82, in copy
+    return copier(x)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 160, in __copy__
+    duplicate = super().__copy__()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 41, in __copy__
+    duplicate.dicts = self.dicts[:]
+    ^^^^^^^^^^^^^^^
+AttributeError: 'super' object has no attribute 'dicts' and no __dict__ for setting new attributes
+2026-09-06 13:22:58,307 ERROR django.request Internal Server Error: /admin/accounts/user/
+2026-09-06 13:23:05,568 ERROR core.middleware Unhandled exception on GET /admin/accounts/user/
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\core\handlers\base.py", line 220, in _get_response
+    response = response.render()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 114, in render
+    self.content = self.rendered_content
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 92, in rendered_content
+    return template.render(context, self._request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\backends\django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 171, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\templatetags\base.py", line 45, in render
+    return super().render(context)
+           ~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\library.py", line 273, in render
+    new_context = context.new(_dict)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 275, in new
+    new_context = super().new(values)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 112, in new
+    new_context = copy(self)
+  File "C:\Users\janam\AppData\Local\Python\pythoncore-3.14-64\Lib\copy.py", line 82, in copy
+    return copier(x)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 160, in __copy__
+    duplicate = super().__copy__()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 41, in __copy__
+    duplicate.dicts = self.dicts[:]
+    ^^^^^^^^^^^^^^^
+AttributeError: 'super' object has no attribute 'dicts' and no __dict__ for setting new attributes
+2026-09-06 13:23:05,575 ERROR django.request Internal Server Error: /admin/accounts/user/
+2026-09-06 13:23:11,083 ERROR core.middleware Unhandled exception on GET /admin/assessments/assessment/
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\sqlite3\base.py", line 354, in execute
+    return super().execute(query, params)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+sqlite3.OperationalError: no such column: patients_patientprofile.full_name
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\core\handlers\base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\options.py", line 718, in wrapper
+    return self.admin_site.admin_view(view)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 188, in _view_wrapper
+    result = _process_exception(request, e)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 186, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\views\decorators\cache.py", line 80, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\sites.py", line 241, in inner
+    return view(request, *args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 48, in _wrapper
+    return bound_method(*args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 188, in _view_wrapper
+    result = _process_exception(request, e)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 186, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\options.py", line 2140, in changelist_view
+    "selection_note": _("0 of %(cnt)s selected") % {"cnt": len(cl.result_list)},
+                                                           ~~~^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\models\query.py", line 384, in __len__
+    self._fetch_all()
+    ~~~~~~~~~~~~~~~^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\models\query.py", line 1933, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\models\query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\models\sql\compiler.py", line 1574, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 122, in execute
+    return super().execute(sql, params)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\sqlite3\base.py", line 354, in execute
+    return super().execute(query, params)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+django.db.utils.OperationalError: no such column: patients_patientprofile.full_name
+2026-09-06 13:23:11,100 ERROR django.request Internal Server Error: /admin/assessments/assessment/
+2026-09-06 13:23:24,198 ERROR core.middleware Unhandled exception on GET /admin/assessments/prediction/
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\core\handlers\base.py", line 220, in _get_response
+    response = response.render()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 114, in render
+    self.content = self.rendered_content
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 92, in rendered_content
+    return template.render(context, self._request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\backends\django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 171, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\templatetags\base.py", line 45, in render
+    return super().render(context)
+           ~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\library.py", line 273, in render
+    new_context = context.new(_dict)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 275, in new
+    new_context = super().new(values)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 112, in new
+    new_context = copy(self)
+  File "C:\Users\janam\AppData\Local\Python\pythoncore-3.14-64\Lib\copy.py", line 82, in copy
+    return copier(x)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 160, in __copy__
+    duplicate = super().__copy__()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 41, in __copy__
+    duplicate.dicts = self.dicts[:]
+    ^^^^^^^^^^^^^^^
+AttributeError: 'super' object has no attribute 'dicts' and no __dict__ for setting new attributes
+2026-09-06 13:23:24,208 ERROR django.request Internal Server Error: /admin/assessments/prediction/
+2026-09-06 13:23:27,612 ERROR core.middleware Unhandled exception on GET /admin/accounts/user/
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\core\handlers\base.py", line 220, in _get_response
+    response = response.render()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 114, in render
+    self.content = self.rendered_content
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 92, in rendered_content
+    return template.render(context, self._request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\backends\django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 171, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\templatetags\base.py", line 45, in render
+    return super().render(context)
+           ~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\library.py", line 273, in render
+    new_context = context.new(_dict)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 275, in new
+    new_context = super().new(values)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 112, in new
+    new_context = copy(self)
+  File "C:\Users\janam\AppData\Local\Python\pythoncore-3.14-64\Lib\copy.py", line 82, in copy
+    return copier(x)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 160, in __copy__
+    duplicate = super().__copy__()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 41, in __copy__
+    duplicate.dicts = self.dicts[:]
+    ^^^^^^^^^^^^^^^
+AttributeError: 'super' object has no attribute 'dicts' and no __dict__ for setting new attributes
+2026-09-06 13:23:27,621 ERROR django.request Internal Server Error: /admin/accounts/user/
+2026-09-06 13:23:32,668 ERROR core.middleware Unhandled exception on GET /admin/chat/chatsession/
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\sqlite3\base.py", line 354, in execute
+    return super().execute(query, params)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+sqlite3.OperationalError: no such column: patients_patientprofile.full_name
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\core\handlers\base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\options.py", line 718, in wrapper
+    return self.admin_site.admin_view(view)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 188, in _view_wrapper
+    result = _process_exception(request, e)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 186, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\views\decorators\cache.py", line 80, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\sites.py", line 241, in inner
+    return view(request, *args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 48, in _wrapper
+    return bound_method(*args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 188, in _view_wrapper
+    result = _process_exception(request, e)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\utils\decorators.py", line 186, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\options.py", line 2140, in changelist_view
+    "selection_note": _("0 of %(cnt)s selected") % {"cnt": len(cl.result_list)},
+                                                           ~~~^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\models\query.py", line 384, in __len__
+    self._fetch_all()
+    ~~~~~~~~~~~~~~~^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\models\query.py", line 1933, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\models\query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\models\sql\compiler.py", line 1574, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 122, in execute
+    return super().execute(sql, params)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\db\backends\sqlite3\base.py", line 354, in execute
+    return super().execute(query, params)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+django.db.utils.OperationalError: no such column: patients_patientprofile.full_name
+2026-09-06 13:23:32,677 ERROR django.request Internal Server Error: /admin/chat/chatsession/
+2026-09-06 13:24:40,314 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 13:24:50,406 WARNING django.request Not Found: /
+2026-09-06 13:25:00,664 ERROR core.middleware Unhandled exception on GET /admin/accounts/user/
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\core\handlers\base.py", line 220, in _get_response
+    response = response.render()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 114, in render
+    self.content = self.rendered_content
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 92, in rendered_content
+    return template.render(context, self._request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\backends\django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 171, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\templatetags\base.py", line 45, in render
+    return super().render(context)
+           ~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\library.py", line 273, in render
+    new_context = context.new(_dict)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 275, in new
+    new_context = super().new(values)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 112, in new
+    new_context = copy(self)
+  File "C:\Users\janam\AppData\Local\Python\pythoncore-3.14-64\Lib\copy.py", line 82, in copy
+    return copier(x)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 160, in __copy__
+    duplicate = super().__copy__()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 41, in __copy__
+    duplicate.dicts = self.dicts[:]
+    ^^^^^^^^^^^^^^^
+AttributeError: 'super' object has no attribute 'dicts' and no __dict__ for setting new attributes
+2026-09-06 13:25:00,673 ERROR django.request Internal Server Error: /admin/accounts/user/
+2026-09-06 13:26:29,051 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\config\urls.py changed, reloading.
+2026-09-06 13:26:29,787 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 13:26:32,462 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\config\urls.py changed, reloading.
+2026-09-06 13:26:33,024 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 13:26:53,318 ERROR core.middleware Unhandled exception on GET /admin/accounts/user/
+Traceback (most recent call last):
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\core\handlers\base.py", line 220, in _get_response
+    response = response.render()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 114, in render
+    self.content = self.rendered_content
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\response.py", line 92, in rendered_content
+    return template.render(context, self._request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\backends\django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 171, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 163, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 1008, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\base.py", line 969, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\admin\templatetags\base.py", line 45, in render
+    return super().render(context)
+           ~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\library.py", line 273, in render
+    new_context = context.new(_dict)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 275, in new
+    new_context = super().new(values)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 112, in new
+    new_context = copy(self)
+  File "C:\Users\janam\AppData\Local\Python\pythoncore-3.14-64\Lib\copy.py", line 82, in copy
+    return copier(x)
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 160, in __copy__
+    duplicate = super().__copy__()
+  File "D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\template\context.py", line 41, in __copy__
+    duplicate.dicts = self.dicts[:]
+    ^^^^^^^^^^^^^^^
+AttributeError: 'super' object has no attribute 'dicts' and no __dict__ for setting new attributes
+2026-09-06 13:26:53,328 ERROR django.request Internal Server Error: /admin/accounts/user/
+2026-09-06 13:29:27,342 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\.venv\Lib\site-packages\django\contrib\auth\signals.py changed, reloading.
+2026-09-06 13:30:37,515 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 13:30:43,049 WARNING django.security.SuspiciousSession Session data corrupted
+2026-09-06 13:30:43,089 WARNING django.security.SuspiciousSession Session data corrupted
+2026-09-06 13:30:50,540 WARNING django.security.SuspiciousSession Session data corrupted
+2026-09-06 13:31:14,182 WARNING django.request Unauthorized: /api/auth/logout/
+2026-09-06 13:31:14,192 WARNING django.request Unauthorized: /api/auth/refresh/
+2026-09-06 14:06:58,213 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 14:07:19,668 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 14:07:19,675 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 14:07:24,322 WARNING django.request Bad Request: /api/auth/login/
+2026-09-06 14:53:00,925 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 14:53:00,929 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 15:24:45,043 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 15:24:45,047 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 17:14:41,819 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 17:14:41,825 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 17:20:02,884 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\accounts\views.py changed, reloading.
+2026-09-06 17:20:02,886 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\accounts\serializers.py changed, reloading.
+2026-09-06 17:20:03,985 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 17:20:32,592 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\accounts\views.py changed, reloading.
+2026-09-06 17:20:32,594 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\accounts\serializers.py changed, reloading.
+2026-09-06 17:20:33,227 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 17:20:33,228 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 17:20:38,949 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\accounts\serializers.py changed, reloading.
+2026-09-06 17:20:38,957 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\patients\views.py changed, reloading.
+2026-09-06 17:20:39,584 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 17:20:39,587 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 17:20:51,456 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\accounts\serializers.py changed, reloading.
+2026-09-06 17:20:51,470 INFO django.utils.autoreload D:\AIproject\AIMHRA-main\AIMHRA-JA\backend\accounts\serializers.py changed, reloading.
+2026-09-06 17:20:52,144 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 17:20:52,149 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 17:21:41,094 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 17:27:06,799 ERROR django.request Service Unavailable: /api/assessments/
+2026-09-06 17:27:15,723 ERROR django.request Service Unavailable: /api/assessments/
+2026-09-06 17:29:46,974 INFO mlcore.training Dataset cleaned: {'rows_in': 6103, 'exact_duplicates_dropped': 1, 'implausible_rows_dropped_by_feature': {'age': 1, 'body_temperature': 43, 'diastolic_bp': 1}, 'implausible_rows_dropped_total': 45, 'rows_out': 6057, 'class_distribution_out': {'mid risk': 2043, 'high risk': 2016, 'low risk': 1998}}
+2026-09-06 17:29:48,515 INFO mlcore.training RandomForest trained in 1.4s | test f1_macro=0.9912 high_risk_recall=0.9934
+2026-09-06 17:29:49,401 INFO mlcore.training XGBoost trained in 0.87s | test f1_macro=0.9934 high_risk_recall=0.9967
+2026-09-06 18:37:52,157 INFO django.utils.autoreload Watching for file changes with StatReloader
+2026-09-06 18:38:31,572 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 18:38:31,586 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 18:38:31,590 WARNING django.request Unauthorized: /api/auth/refresh/
+2026-09-06 18:39:58,355 WARNING django.request Bad Request: /api/auth/login/
+2026-09-06 20:51:48,398 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 20:51:48,402 WARNING django.request Unauthorized: /api/auth/profile/
+2026-09-06 20:53:59,374 ERROR django.request Service Unavailable: /api/models/feature-importance/
+2026-09-06 20:53:59,417 ERROR django.request Service Unavailable: /api/models/feature-importance/

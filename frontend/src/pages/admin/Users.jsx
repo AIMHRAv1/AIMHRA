@@ -122,7 +122,7 @@ export default function AdminUsers() {
           </select>
           <select value={assignForm.patient} onChange={(e) => setAssignForm({ ...assignForm, patient: e.target.value })} required>
             <option value="">— patient —</option>
-            {patients.filter((p) => true).map((p) => <option key={p.id} value={p.id}>{p.patient_code} ({p.full_name || p.username})</option>)}
+            {patients.map((p) => <option key={p.id} value={p.id}>{p.patient_code} ({p.full_name || 'Unnamed'})</option>)}
           </select>
           <button className="btn btn-primary">Assign</button>
         </form>

@@ -2,12 +2,6 @@
 import http, { api, tokenStorage } from '../api/client'
 
 export const authService = {
-  async register(payload) {
-    const data = await api.post('/auth/register/', payload)
-    tokenStorage.access = data.tokens.access
-    tokenStorage.refresh = data.tokens.refresh
-    return data.user
-  },
   async login(username, password) {
     const { data } = await http.post('/auth/login/', { username, password })
     tokenStorage.access = data.access
@@ -29,10 +23,10 @@ export const authService = {
 }
 
 export const patientService = {
-  myProfile: () => api.get('/patients/me/'),
-  updateMyProfile: (payload) => api.patch('/patients/me/', payload),
   list: (params) => api.get('/patients/', { params }),
+  create: (payload) => api.post('/patients/', payload),
   detail: (id) => api.get(`/patients/${id}/`),
+  update: (id, payload) => api.patch(`/patients/${id}/`, payload),
   assignments: () => api.get('/patients/assignments/'),
   createAssignment: (payload) => api.post('/patients/assignments/', payload),
   deleteAssignment: (id) => api.delete(`/patients/assignments/${id}/`),
@@ -56,8 +50,8 @@ export const modelService = {
 }
 
 export const chatService = {
-  sessions: () => api.get('/chat/sessions/'),
-  createSession: (title) => api.post('/chat/sessions/', { title }),
+  sessions: (patientId, params) => api.get('/chat/sessions/', { params: patientId ? { patient: patientId, ...params } : params }),
+  createSession: (patientId, title) => api.post('/chat/sessions/', { patient: patientId, title }),
   session: (id) => api.get(`/chat/sessions/${id}/`),
   send: (id, message) => api.post(`/chat/sessions/${id}/send/`, { message }),
   deleteSession: (id) => api.delete(`/chat/sessions/${id}/`),
@@ -75,6 +69,7 @@ export const kbService = {
 export const reportService = {
   list: (params) => api.get('/reports/', { params }),
   generate: (assessmentId) => api.post('/reports/', { assessment: assessmentId }),
+  download: (id) => api.getRaw(`/reports/${id}/download/`),
 }
 
 export const adminService = {

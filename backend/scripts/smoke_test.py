@@ -1,5 +1,5 @@
-"""End-to-end smoke test of the full workflow through Django's test client:
-register -> login -> profile -> assessment -> prediction + SHAP + rules ->
+"""End-to-end smoke test of the healthcare-worker workflow through Django's test
+client: login -> create patient -> assessment -> prediction + SHAP + rules ->
 history/trend -> chat escalation -> chat fallback -> KB ingest + retrieve -> report PDF.
 Run: python scripts/smoke_test.py (from backend/)
 """
@@ -14,10 +14,12 @@ import django
 
 django.setup()
 
-# Clean slate: remove users created by previous smoke runs.
+# Clean slate: remove users/patients created by previous smoke runs.
 from accounts.models import User
+from patients.models import PatientProfile
 
-User.objects.filter(username__in=["smoke_patient", "smoke_admin"]).delete()
+User.objects.filter(username__in=["smoke_worker", "smoke_admin"]).delete()
+PatientProfile.objects.filter(full_name="Smoke Patient").delete()
 
 from django.test import Client
 
@@ -36,28 +38,41 @@ def check(name, ok, detail=""):
         FAILURES.append(name)
 
 
-# --- register & login ---
-r = c.post("/api/auth/register/", {
-    "username": "smoke_patient", "email": "smoke@example.com",
-    "full_name": "Smoke Patient", "phone": "+1000000000",
-    "password": "Sm0ke!Test42", "confirm_password": "Sm0ke!Test42",
-}, content_type="application/json")
-check("register returns 201", r.status_code == 201, r.content[:200])
-token = J(r)["tokens"]["access"]
+# --- staff login (self-registration does not exist) ---
+worker = User.objects.create_user(
+    username="smoke_worker", email="worker@example.com",
+    full_name="Smoke Worker", password="Sm0ke!Test42", role="HEALTHCARE_WORKER",
+)
+r = c.post("/api/auth/login/", {"username": "smoke_worker", "password": "Sm0ke!Test42"},
+           content_type="application/json")
+check("worker login returns 200", r.status_code == 200)
+check("role is HEALTHCARE_WORKER", J(r)["user"]["role"] == "HEALTHCARE_WORKER", r.content[:200])
+token = J(r)["access"]
 auth = {"HTTP_AUTHORIZATION": f"Bearer {token}"}
 
-r = c.post("/api/auth/login/", {"username": "smoke_patient", "password": "Sm0ke!Test42"},
-           content_type="application/json")
-check("login returns 200 with user role", r.status_code == 200 and J(r)["user"]["role"] == "PATIENT",
-      r.content[:200])
+# --- patient registration is removed ---
+r = c.post("/api/auth/register/", {
+    "username": "smoke_patient", "email": "smoke@example.com",
+    "password": "Sm0ke!Test42", "confirm_password": "Sm0ke!Test42",
+}, content_type="application/json")
+check("self-registration removed (404)", r.status_code == 404, r.content[:200])
 
-# --- profile ---
-r = c.get("/api/patients/me/", **auth)
-check("patient profile auto-created", r.status_code == 200 and J(r)["patient_code"].startswith("P-"))
+# --- create a standalone patient record ---
+r = c.post("/api/patients/", {
+    "full_name": "Smoke Patient", "email": "patient@example.com", "phone": "+9771000000000",
+    "date_of_birth": "1998-05-12", "blood_group": "O+",
+    "gestational_week_at_registration": 24, "gravidity": 1, "parity": 0,
+    "medical_history_notes": "", "allergies": "NKDA",
+}, content_type="application/json", **auth)
+check("patient created", r.status_code == 201, r.content[:300])
+patient = J(r)
+check("patient code generated", patient["patient_code"].startswith("P-"))
+check("creator recorded", patient["created_by"] == worker.id)
+patient_id = patient["id"]
 
 # --- assessment with emergency vitals ---
 payload = {
-    "visit_date": "2026-08-19", "gestational_week": 24,
+    "patient": patient_id, "visit_date": "2026-08-19", "gestational_week": 24,
     "age": 29, "body_temperature": 98.6, "heart_rate": 88,
     "systolic_bp": 165, "diastolic_bp": 105, "bmi": 24.1,
     "hba1c": 38, "fasting_glucose": 5.5,
@@ -85,18 +100,18 @@ check("out-of-range input rejected 400", r.status_code == 400 and not r.json().g
 # --- second assessment (normal) + history/trend ---
 normal = dict(payload, systolic_bp=118, diastolic_bp=76, symptoms=["none"])
 r = c.post("/api/assessments/", normal, content_type="application/json", **auth)
-check("second assessment created", r.status_code == 201)
+check("second assessment accepted", r.status_code == 201)
 
-r = c.get("/api/assessments/risk-history/", **auth)
-check("risk history has 2 entries", r.status_code == 200 and len(r.json()["data"]["history"]) == 2)
+r = c.get(f"/api/assessments/risk-history/?patient={patient_id}", **auth)
+check("history has 2 entries", r.status_code == 200 and len(J(r)["history"]) == 2)
+r = c.get(f"/api/assessments/risk-trends/?patient={patient_id}", **auth)
+check("trend computed", r.status_code == 200 and J(r)["trend"]["visits"] == 2)
 
-r = c.get("/api/assessments/risk-trends/", **auth)
-check("trend computed", r.status_code == 200 and r.json()["data"]["trend"]["visits"] == 2)
-
-# --- chat: emergency path (LLM must be bypassed) ---
-r = c.post("/api/chat/sessions/", {"title": "smoke"}, content_type="application/json", **auth)
+# --- chat: worker creates patient-scoped session, emergency path ---
+r = c.post("/api/chat/sessions/", {"patient": patient_id, "title": "smoke"},
+           content_type="application/json", **auth)
 session_id = J(r)["session"]["id"]
-check("chat session created", r.status_code == 201)
+check("chat session created for patient", r.status_code == 201 and J(r)["session"]["patient"] == patient_id)
 
 r = c.post(f"/api/chat/sessions/{session_id}/send/", {"message": "I have severe vaginal bleeding and feel faint"},
            content_type="application/json", **auth)
@@ -110,10 +125,10 @@ reply2 = J(r)["reply"]
 check("chat normal path answers safely", r.status_code == 200 and "healthcare professional" in reply2["content"] + reply2.get("disclaimer", ""))
 
 # --- knowledge base: admin upload + retrieval ---
-from accounts.models import User
-
-admin = User.objects.create_superuser(username="smoke_admin", email="admin@example.com", password="Adm1n!Test42", role="ADMIN")
-r = c.post("/api/auth/login/", {"username": "smoke_admin", "password": "Adm1n!Test42"}, content_type="application/json")
+admin = User.objects.create_superuser(username="smoke_admin", email="admin@example.com",
+                                      password="Adm1n!Test42", role="ADMIN")
+r = c.post("/api/auth/login/", {"username": "smoke_admin", "password": "Adm1n!Test42"},
+           content_type="application/json")
 admin_token = J(r)["access"]
 admin_auth = {"HTTP_AUTHORIZATION": f"Bearer {admin_token}"}
 
@@ -152,7 +167,7 @@ r = c.get("/api/audit/", **admin_auth)
 check("audit log records events", r.status_code == 200 and J(r)["count"] >= 5)
 
 r = c.get("/api/audit/", **auth)
-check("audit log forbidden for patient", r.status_code == 403)
+check("audit log forbidden for workers", r.status_code == 403)
 
 print()
 if FAILURES:

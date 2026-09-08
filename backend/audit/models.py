@@ -18,6 +18,8 @@ ACTION_KB_REINDEXED = "KB_REINDEXED"
 ACTION_KB_DELETED = "KB_DELETED"
 ACTION_USER_UPDATED = "USER_UPDATED"
 ACTION_PATIENT_ASSIGNED = "PATIENT_ASSIGNED"
+ACTION_PATIENT_CREATED = "PATIENT_CREATED"
+ACTION_PATIENT_UPDATED = "PATIENT_UPDATED"
 
 
 class AuditLog(models.Model):
@@ -39,6 +41,8 @@ class AuditLog(models.Model):
         (ACTION_KB_DELETED, "Knowledge document deleted"),
         (ACTION_USER_UPDATED, "User account updated"),
         (ACTION_PATIENT_ASSIGNED, "Patient assigned to healthcare worker"),
+        (ACTION_PATIENT_CREATED, "Patient record created"),
+        (ACTION_PATIENT_UPDATED, "Patient record updated"),
     )
 
     user = models.ForeignKey(

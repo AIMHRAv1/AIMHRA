@@ -2,15 +2,6 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const NAV_BY_ROLE = {
-  PATIENT: [
-    { to: '/app/dashboard', label: 'Dashboard', icon: '▦' },
-    { to: '/app/assessment', label: 'New Assessment', icon: '＋' },
-    { to: '/app/history', label: 'Risk History & Trend', icon: '📈' },
-    { to: '/app/chat', label: 'Ask AIMHRA', icon: '💬' },
-    { to: '/app/reports', label: 'Reports', icon: '📄' },
-    { to: '/app/profile', label: 'My Profile', icon: '👤' },
-    { to: '/app/settings', label: 'Settings', icon: '⚙' },
-  ],
   HEALTHCARE_WORKER: [
     { to: '/app/dashboard', label: 'Dashboard', icon: '▦' },
     { to: '/app/patients', label: 'Patients', icon: '👥' },
@@ -19,6 +10,7 @@ const NAV_BY_ROLE = {
   ],
   ADMIN: [
     { to: '/app/dashboard', label: 'Dashboard', icon: '▦' },
+    { to: '/app/patients', label: 'Patients', icon: '👥' },
     { to: '/app/admin/users', label: 'Users', icon: '👤' },
     { to: '/app/admin/models', label: 'Models', icon: '🧠' },
     { to: '/app/admin/knowledge', label: 'Knowledge Base', icon: '📚' },
@@ -27,7 +19,6 @@ const NAV_BY_ROLE = {
 }
 
 const ROLE_LABELS = {
-  PATIENT: 'Patient',
   HEALTHCARE_WORKER: 'Healthcare Worker',
   ADMIN: 'Administrator',
 }

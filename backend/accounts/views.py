@@ -1,18 +1,16 @@
 import logging
 
-from django.contrib.auth import authenticate
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from accounts.models import User
 from accounts.serializers import (
     ChangePasswordSerializer,
     CustomTokenObtainPairSerializer,
     PasswordResetRequestSerializer,
-    RegisterSerializer,
     UserAdminSerializer,
     UserSerializer,
 )
@@ -20,33 +18,6 @@ from audit import services as audit_svc
 from core.permissions import IsAdmin
 
 logger = logging.getLogger(__name__)
-
-
-class RegisterView(generics.CreateAPIView):
-    serializer_class = RegisterSerializer
-    permission_classes = [permissions.AllowAny]
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        audit_svc.log_event(request, "REGISTER", target_type="user", target_id=str(user.id))
-        return Response(
-            {
-                "success": True,
-                "data": {
-                    "user": UserSerializer(user).data,
-                    # Issue tokens immediately so the user is logged in after signup.
-                    "tokens": _tokens_for(user),
-                },
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-
-def _tokens_for(user):
-    refresh = RefreshToken.for_user(user)
-    return {"refresh": str(refresh), "access": str(refresh.access_token)}
 
 
 class LoginView(TokenObtainPairView):

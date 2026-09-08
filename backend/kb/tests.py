@@ -67,8 +67,8 @@ class KBAPITests(TestCase):
         cls.admin = User.objects.create_user(
             username="kbadmin", email="k@t.com", password="Adm1n!Pass9", role="ADMIN"
         )
-        cls.patient = User.objects.create_user(
-            username="kbpat", email="kp@t.com", password="Str0ng!Pass1", role="PATIENT"
+        cls.worker = User.objects.create_user(
+            username="kbworker", email="kp@t.com", password="Str0ng!Pass1", role="HEALTHCARE_WORKER"
         )
 
     def test_admin_can_upload_text_document(self):
@@ -78,15 +78,15 @@ class KBAPITests(TestCase):
         }, content_type="application/json", HTTP_AUTHORIZATION=f"Bearer {token}")
         self.assertEqual(r.status_code, 201, r.content)
 
-    def test_patient_cannot_upload(self):
-        token = RefreshToken.for_user(self.patient).access_token
+    def test_worker_cannot_upload(self):
+        token = RefreshToken.for_user(self.worker).access_token
         r = self.client.post("/api/rag/documents/", {
             "title": "Doc", "content_text": DOC_TEXT,
         }, content_type="application/json", HTTP_AUTHORIZATION=f"Bearer {token}")
         self.assertEqual(r.status_code, 403)
 
     def test_retrieve_endpoint_reports_empty_kb(self):
-        token = RefreshToken.for_user(self.patient).access_token
+        token = RefreshToken.for_user(self.worker).access_token
         r = self.client.post("/api/rag/retrieve/", {"question": "iron?"},
                              content_type="application/json", HTTP_AUTHORIZATION=f"Bearer {token}")
         self.assertEqual(r.status_code, 200)

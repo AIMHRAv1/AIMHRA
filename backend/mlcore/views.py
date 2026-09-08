@@ -68,7 +68,7 @@ class ModelActivateView(APIView):
             raise ApiError("Model version not found.", code="NOT_FOUND", status_code=404)
         if row.status == "PRODUCTION":
             return ok({"model": ModelVersionSerializer(row).data, "activated": False})
-        ModelVersion.objects.filter(name=row.name).exclude(pk=row.pk).update(status="RETIRED")
+        ModelVersion.objects.filter(status="PRODUCTION").exclude(pk=row.pk).update(status="RETIRED")
         row.status = "PRODUCTION"
         row.save(update_fields=["status"])
         get_production_bundle(force_reload=True)

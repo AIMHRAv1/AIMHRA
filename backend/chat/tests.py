@@ -1,4 +1,5 @@
-"""Chat pipeline tests: emergency escalation, safe fallback, access control."""
+"""Chat pipeline tests: worker-driven patient sessions, emergency escalation,
+safe fallback and access control."""
 from accounts.models import User
 from chat.models import ChatMessage, ChatSession
 from django.test import TestCase
@@ -15,10 +16,18 @@ KB_TEXT = (
 class ChatPipelineTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_user(
-            username="chatpat", email="c@t.com", password="Str0ng!Pass1", role="PATIENT"
+        cls.worker = User.objects.create_user(
+            username="chatworker", email="c@t.com", password="Str0ng!Pass1", role="HEALTHCARE_WORKER"
         )
-        cls.profile = PatientProfile.objects.create(user=cls.user)
+        cls.other_worker = User.objects.create_user(
+            username="chatworker2", email="c2@t.com", password="Str0ng!Pass1", role="HEALTHCARE_WORKER"
+        )
+        cls.profile = PatientProfile.objects.create(
+            full_name="Chat Patient", created_by=cls.worker
+        )
+        cls.other_profile = PatientProfile.objects.create(
+            full_name="Other Worker Patient", created_by=cls.other_worker
+        )
         admin = User.objects.create_user(
             username="chatadmin", email="ca@t.com", password="Adm1n!Pass9", role="ADMIN"
         )
@@ -26,17 +35,50 @@ class ChatPipelineTests(TestCase):
         cls.admin_auth = {"HTTP_AUTHORIZATION": f"Bearer {admin_token}"}
 
     def setUp(self):
-        token = RefreshToken.for_user(self.user).access_token
+        token = RefreshToken.for_user(self.worker).access_token
         self.auth = {"HTTP_AUTHORIZATION": f"Bearer {token}"}
-        # No title -> defaults to "New conversation" -> replaced by first message.
-        r = self.client.post("/api/chat/sessions/", {}, content_type="application/json", **self.auth)
+        # Worker starts a conversation for their patient.
+        r = self.client.post(
+            "/api/chat/sessions/",
+            {"patient": self.profile.id},
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(r.status_code, 201, r.content)
         self.session_id = (r.json().get("data") or r.json())["session"]["id"]
 
     def _send(self, message):
-        r = self.client.post(f"/api/chat/sessions/{self.session_id}/send/",
-                             {"message": message}, content_type="application/json", **self.auth)
+        r = self.client.post(
+            f"/api/chat/sessions/{self.session_id}/send/",
+            {"message": message},
+            content_type="application/json",
+            **self.auth,
+        )
         self.assertEqual(r.status_code, 200, r.content)
         return (r.json().get("data") or r.json())["reply"]
+
+    def test_worker_can_create_patient_specific_session(self):
+        session = ChatSession.objects.get(pk=self.session_id)
+        self.assertEqual(session.patient_id, self.profile.id)
+        self.assertEqual(session.created_by_id, self.worker.id)
+
+    def test_worker_cannot_create_session_for_unauthorized_patient(self):
+        token = RefreshToken.for_user(self.worker).access_token
+        r = self.client.post(
+            "/api/chat/sessions/",
+            {"patient": self.other_profile.id},
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_worker_cannot_open_another_workers_session(self):
+        token = RefreshToken.for_user(self.other_worker).access_token
+        r = self.client.get(
+            f"/api/chat/sessions/{self.session_id}/",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(r.status_code, 403)
 
     def test_emergency_message_bypasses_llm(self):
         reply = self._send("I am having convulsions and vaginal bleeding")
@@ -55,9 +97,12 @@ class ChatPipelineTests(TestCase):
         self.assertIn(reply["generation_mode"], ("no_llm_configured", "rag_only_fallback", "llm"))
 
     def test_rag_sources_attached_when_kb_has_content(self):
-        self.client.post("/api/rag/documents/", {
-            "title": "Nausea Guidance", "content_text": KB_TEXT,
-        }, content_type="application/json", **self.admin_auth)
+        self.client.post(
+            "/api/rag/documents/",
+            {"title": "Nausea Guidance", "content_text": KB_TEXT},
+            content_type="application/json",
+            **self.admin_auth,
+        )
         reply = self._send("How do I deal with morning sickness?")
         if reply["generation_mode"] in ("rag_only_fallback", "llm"):
             self.assertTrue(any(s["document_title"] == "Nausea Guidance" for s in reply["sources"]))
@@ -76,18 +121,34 @@ class ChatPipelineTests(TestCase):
         self.assertTrue(ChatMessage.objects.filter(session_id=self.session_id, role="ASSISTANT").exists())
 
     def test_empty_message_rejected(self):
-        r = self.client.post(f"/api/chat/sessions/{self.session_id}/send/",
-                             {"message": "  "}, content_type="application/json", **self.auth)
+        r = self.client.post(
+            f"/api/chat/sessions/{self.session_id}/send/",
+            {"message": "  "},
+            content_type="application/json",
+            **self.auth,
+        )
         self.assertEqual(r.status_code, 400)
-
-    def test_session_isolation(self):
-        other = User.objects.create_user(username="chatpat2", email="c2@t.com", password="Str0ng!Pass1")
-        other_token = RefreshToken.for_user(other).access_token
-        r = self.client.get(f"/api/chat/sessions/{self.session_id}/",
-                            HTTP_AUTHORIZATION=f"Bearer {other_token}")
-        self.assertEqual(r.status_code, 403)
 
     def test_session_title_from_first_message(self):
         self._send("Question about iron supplements during pregnancy")
         session = ChatSession.objects.get(pk=self.session_id)
         self.assertIn("iron", session.title.lower())
+
+    def test_worker_can_delete_own_session(self):
+        r = self.client.delete(
+            f"/api/chat/sessions/{self.session_id}/",
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(ChatSession.objects.filter(pk=self.session_id).exists())
+
+    def test_worker_cannot_delete_others_session(self):
+        token = RefreshToken.for_user(self.other_worker).access_token
+        r = self.client.delete(
+            f"/api/chat/sessions/{self.session_id}/",
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(ChatSession.objects.filter(pk=self.session_id).exists())
