@@ -7,6 +7,7 @@ from chat.models import ChatMessage, ChatSession
 from chat.services import respond
 from core.exceptions import ApiError
 from core.responses import ok
+from core.permissions import IsHealthcareWorkerOnly
 from patients.models import PatientProfile
 from patients.selectors import can_access_patient, patient_ids_for_healthcare_worker
 
@@ -43,6 +44,7 @@ def _resolve_patient_for_session(request, patient_id):
 
 
 class SessionListCreateView(APIView):
+    permission_classes = [IsHealthcareWorkerOnly]
     def get(self, request):
         user = request.user
         qs = ChatSession.objects.select_related("patient").order_by("-updated_at")
@@ -70,6 +72,7 @@ class SessionListCreateView(APIView):
 
 
 class SessionDetailView(APIView):
+    permission_classes = [IsHealthcareWorkerOnly]
     def get(self, request, session_id):
         session = _resolve_session(request, session_id)
         messages = ChatMessage.objects.filter(session=session).order_by("created_at", "id")
@@ -85,6 +88,7 @@ class SessionDetailView(APIView):
 
 class SendMessageView(APIView):
     """Main chatbot endpoint: message -> safety pipeline -> answer."""
+    permission_classes = [IsHealthcareWorkerOnly]
 
     def post(self, request, session_id):
         session = _resolve_session(request, session_id)

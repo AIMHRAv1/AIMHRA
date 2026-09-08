@@ -15,6 +15,8 @@ class PatientProfileSerializer(serializers.ModelSerializer):
     assessment_count = serializers.SerializerMethodField()
     last_assessment_date = serializers.SerializerMethodField()
     open_alert_count = serializers.SerializerMethodField()
+    assigned_healthcare_worker = serializers.SerializerMethodField()
+    last_assessed_by = serializers.SerializerMethodField()
 
     class Meta:
         model = PatientProfile
@@ -29,6 +31,8 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             "current_risk", "current_confidence", "assessment_count",
             "last_assessment_date", "open_alert_count",
             "current_trend_status", "current_trend_direction",
+            "assigned_healthcare_worker",
+            "last_assessed_by",
         ]
         read_only_fields = [
             "id", "patient_code", "created_by", "created_at", "updated_at",
@@ -59,6 +63,37 @@ class PatientProfileSerializer(serializers.ModelSerializer):
 
     def get_open_alert_count(self, obj):
         return self._summary(obj).get("open_alert_count", 0)
+
+    def get_assigned_healthcare_worker(self, obj):
+        workers = (assignment.healthcare_worker for assignment in obj.assigned_workers.all())
+        return ", ".join(
+            worker.full_name or worker.username
+            for worker in workers
+        ) or None
+
+    def get_last_assessed_by(self, obj):
+        assessment = obj.assessments.select_related("created_by").order_by(
+            "-visit_date", "-id"
+        ).first()
+        if not assessment or not assessment.created_by:
+            return None
+        return assessment.created_by.full_name or assessment.created_by.username
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        if request and getattr(request.user, "role", None) == "ADMIN":
+            return {
+                key: data[key]
+                for key in (
+                    "id",
+                    "patient_code",
+                    "last_assessed_by",
+                    "current_risk",
+                    "assessment_count",
+                )
+            }
+        return data
 
     def validate_gravidity(self, value):
         if value is not None and value > 30:

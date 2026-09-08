@@ -3,10 +3,11 @@ import { adminService } from '../../services/auth'
 import { EmptyState, ErrorState, Loading } from '../../components/ui'
 
 const ACTIONS = [
-  'LOGIN', 'LOGIN_FAILED', 'REGISTER', 'PROFILE_UPDATED', 'PASSWORD_CHANGED',
+  'LOGIN', 'LOGIN_FAILED', 'PROFILE_UPDATED', 'PASSWORD_CHANGED',
   'ASSESSMENT_CREATED', 'PREDICTION', 'RULE_ESCALATION', 'CHAT_ACCESS',
   'REPORT_GENERATED', 'MODEL_TRAINED', 'MODEL_ACTIVATED', 'KB_UPLOADED',
   'KB_REINDEXED', 'KB_DELETED', 'USER_UPDATED', 'PATIENT_ASSIGNED',
+  'PATIENT_CREATED', 'PATIENT_UPDATED',
 ]
 
 export default function AdminAudit() {
@@ -50,15 +51,15 @@ export default function AdminAudit() {
       ) : (
         <div className="card">
           <table className="data-table">
-            <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+            <thead><tr><th>Time</th><th>Actor</th><th>Event</th><th>Target</th><th>What happened</th></tr></thead>
             <tbody>
               {logs.map((l) => (
                 <tr key={l.id}>
                   <td>{new Date(l.created_at).toLocaleString()}</td>
-                  <td>{l.username || <span className="muted">system</span>}</td>
-                  <td><code>{l.action}</code></td>
-                  <td className="muted small">{l.target_type}{l.target_id ? `#${l.target_id}` : ''}</td>
-                  <td className="cell-detail"><code className="small">{JSON.stringify(l.detail)}</code></td>
+                  <td>{l.actor || l.username || <span className="muted">System</span>}</td>
+                  <td>{l.action_label || l.action}</td>
+                  <td className="muted small">{l.target_label || l.target_type}</td>
+                  <td className="cell-detail">{l.summary || 'Event recorded.'}</td>
                 </tr>
               ))}
             </tbody>

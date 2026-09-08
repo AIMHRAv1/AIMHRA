@@ -77,5 +77,10 @@ export const adminService = {
   users: () => api.get('/auth/users/'),
   createUser: (payload) => api.post('/auth/users/', payload),
   updateUser: (id, payload) => api.patch(`/auth/users/${id}/`, payload),
+  workerProfile: (id) => api.get(`/auth/users/${id}/profile/`),
   auditLogs: (params) => api.get('/audit/', { params }),
+}
+
+export const adminPatientService = {
+  history: (id) => api.get(`/patients/admin-history/${id}/`),
 }

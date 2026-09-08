@@ -14,6 +14,8 @@ import AdminUsers from './pages/admin/Users'
 import AdminModels from './pages/admin/Models'
 import AdminKnowledge from './pages/admin/Knowledge'
 import AdminAudit from './pages/admin/Audit'
+import AdminWorkerProfile from './pages/admin/WorkerProfile'
+import AdminPatientHistory from './pages/admin/PatientHistory'
 
 function RoleDashboard() {
   const { user } = useAuth()
@@ -31,12 +33,14 @@ export default function App() {
       <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="dashboard" element={<RoleDashboard />} />
         <Route path="patients" element={<ProtectedRoute roles={['HEALTHCARE_WORKER', 'ADMIN']}><PatientList /></ProtectedRoute>} />
-        <Route path="patients/new" element={<ProtectedRoute roles={['HEALTHCARE_WORKER', 'ADMIN']}><PatientNew /></ProtectedRoute>} />
-        <Route path="patients/:id/*" element={<ProtectedRoute roles={['HEALTHCARE_WORKER', 'ADMIN']}><PatientDetail /></ProtectedRoute>} />
-        <Route path="alerts" element={<ProtectedRoute roles={['HEALTHCARE_WORKER', 'ADMIN']}><Alerts /></ProtectedRoute>} />
-        <Route path="reports" element={<ProtectedRoute roles={['HEALTHCARE_WORKER', 'ADMIN']}><HcwReports /></ProtectedRoute>} />
+        <Route path="patients/new" element={<ProtectedRoute roles={['HEALTHCARE_WORKER']}><PatientNew /></ProtectedRoute>} />
+        <Route path="patients/:id/*" element={<ProtectedRoute roles={['HEALTHCARE_WORKER']}><PatientDetail /></ProtectedRoute>} />
+        <Route path="alerts" element={<ProtectedRoute roles={['HEALTHCARE_WORKER']}><Alerts /></ProtectedRoute>} />
+        <Route path="reports" element={<ProtectedRoute roles={['HEALTHCARE_WORKER']}><HcwReports /></ProtectedRoute>} />
 
         <Route path="admin/users" element={<ProtectedRoute roles={['ADMIN']}><AdminUsers /></ProtectedRoute>} />
+        <Route path="admin/users/:id" element={<ProtectedRoute roles={['ADMIN']}><AdminWorkerProfile /></ProtectedRoute>} />
+        <Route path="admin/patients/:id" element={<ProtectedRoute roles={['ADMIN']}><AdminPatientHistory /></ProtectedRoute>} />
         <Route path="admin/models" element={<ProtectedRoute roles={['ADMIN']}><AdminModels /></ProtectedRoute>} />
         <Route path="admin/knowledge" element={<ProtectedRoute roles={['ADMIN']}><AdminKnowledge /></ProtectedRoute>} />
         <Route path="admin/audit" element={<ProtectedRoute roles={['ADMIN']}><AdminAudit /></ProtectedRoute>} />

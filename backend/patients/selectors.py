@@ -2,38 +2,24 @@
 
 
 def patient_ids_for_healthcare_worker(user):
-    """All patient ids a healthcare worker may access.
+    """All patient ids available to a healthcare worker.
 
-    Access = patients the worker created themselves OR patients explicitly
-    assigned to them by an administrator. Admins use the all-patient path and
-    never call this helper.
+    Patient records are shared across the healthcare-worker team. The helper
+    remains as a compatibility boundary for patient-scoped endpoints.
     """
-    from patients.models import PatientAssignment, PatientProfile
+    from patients.models import PatientProfile
 
-    created = set(
-        PatientProfile.objects.filter(created_by=user).values_list("id", flat=True)
-    )
-    assigned = set(
-        PatientAssignment.objects.filter(healthcare_worker=user).values_list("patient_id", flat=True)
-    )
-    return created | assigned
+    return set(PatientProfile.objects.values_list("id", flat=True))
 
 
 def can_access_patient(user, patient_profile):
-    """Admins: all patients. Workers: patients they created or that are
-    explicitly assigned to them. Anything else is denied."""
+    """Admins: all patients. Healthcare workers: all shared patient records."""
     if not (user and user.is_authenticated):
         return False
     if user.role == "ADMIN":
         return True
     if user.role == "HEALTHCARE_WORKER":
-        from patients.models import PatientAssignment
-
-        if patient_profile.created_by_id == user.id:
-            return True
-        return PatientAssignment.objects.filter(
-            healthcare_worker=user, patient=patient_profile
-        ).exists()
+        return True
     return False
 
 
@@ -41,11 +27,13 @@ def scoped_patient_queryset(user):
     """Patient records visible to the authenticated user."""
     from patients.models import PatientProfile
 
-    qs = PatientProfile.objects.select_related("created_by").order_by("-created_at", "-id").all()
+    qs = PatientProfile.objects.select_related("created_by").prefetch_related(
+        "assigned_workers", "assessments__created_by"
+    ).order_by("-created_at", "-id").all()
     if user.role == "ADMIN":
         return qs
     if user.role == "HEALTHCARE_WORKER":
-        return qs.filter(id__in=patient_ids_for_healthcare_worker(user))
+        return qs
     return PatientProfile.objects.none()
 
 

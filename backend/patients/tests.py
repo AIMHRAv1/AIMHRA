@@ -112,17 +112,17 @@ class PatientApiTests(TestCase):
         self.assertEqual(patient.full_name, "Updated Name")
         self.assertEqual(patient.emergency_contact_name, "New EC")
 
-    def test_worker_cannot_access_another_workers_patient(self):
+    def test_worker_can_access_another_workers_patient(self):
         patient = PatientProfile.objects.create(full_name="Private", created_by=self.other_worker)
         r = self.client.get(f"/api/patients/{patient.id}/", **self.worker_auth)
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 200)
         r = self.client.patch(
             f"/api/patients/{patient.id}/",
             {"full_name": "Hacked"},
             content_type="application/json",
             **self.worker_auth,
         )
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 200)
 
     def test_worker_can_access_assigned_patient(self):
         patient = PatientProfile.objects.create(full_name="Assigned", created_by=self.other_worker)
@@ -130,27 +130,51 @@ class PatientApiTests(TestCase):
         r = self.client.get(f"/api/patients/{patient.id}/", **self.worker_auth)
         self.assertEqual(r.status_code, 200)
 
-    def test_admin_can_access_all_patients(self):
+    def test_admin_can_view_limited_patient_list(self):
         PatientProfile.objects.create(full_name="A1", created_by=self.worker)
         PatientProfile.objects.create(full_name="A2", created_by=self.other_worker)
         r = self.client.get("/api/patients/", **self.admin_auth)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["data"]["count"], 2)
+        self.assertEqual(
+            set(r.json()["data"]["results"][0]),
+            {
+                "id",
+                "patient_code",
+                "last_assessed_by",
+                "current_risk",
+                "assessment_count",
+            },
+        )
 
-    def test_worker_automatically_sees_created_patients(self):
+    def test_admin_cannot_open_patient_detail(self):
+        patient = PatientProfile.objects.create(
+            full_name="Private", medical_history_notes="Sensitive", created_by=self.worker
+        )
+        PatientAssignment.objects.create(
+            patient=patient, healthcare_worker=self.other_worker, assigned_by=self.admin
+        )
+        r = self.client.get(f"/api/patients/{patient.id}/", **self.admin_auth)
+        self.assertEqual(r.status_code, 403)
+
+    def test_worker_sees_all_shared_patients(self):
         PatientProfile.objects.create(full_name="Mine", created_by=self.worker)
         PatientProfile.objects.create(full_name="Not Mine", created_by=self.other_worker)
         r = self.client.get("/api/patients/", **self.worker_auth)
         names = {p["full_name"] for p in r.json()["data"]["results"]}
-        self.assertEqual(names, {"Mine"})
+        self.assertEqual(names, {"Mine", "Not Mine"})
 
     def test_search_by_code_name_phone_email(self):
-        PatientProfile.objects.create(full_name="Searchable Person", phone="+9771234567", email="s@e.com")
+        PatientProfile.objects.create(
+            full_name="Searchable Person",
+            phone="+9771234567",
+            email="s@e.com",
+            created_by=self.worker,
+        )
         for term in ["Searchable", "+9771234567", "s@e.com", "P-"]:
-            r = self.client.get(f"/api/patients/?search={term}", **self.admin_auth)
+            r = self.client.get(f"/api/patients/?search={term}", **self.worker_auth)
             self.assertEqual(r.status_code, 200)
-            names = {p["full_name"] for p in r.json()["data"]["results"]}
-            self.assertIn("Searchable Person", names)
+            self.assertEqual(r.json()["data"]["count"], 1)
 
     def test_blood_group_validated(self):
         r = self.client.post(

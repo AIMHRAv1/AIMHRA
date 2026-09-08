@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiError } from '../../api/client'
 import { assessmentService } from '../../services/auth'
 import { ShapBars } from '../../charts'
 import { CategoryBadge, Disclaimer, ErrorState, RiskBadge } from '../ui'
 
 const FIELDS = [
-  { name: 'age', label: 'Age (years)', min: 14, max: 55, step: 1, hint: 'Plausible range 14–55' },
+  { name: 'age', label: 'Age (years)', min: 14, max: 55, step: 1, hint: 'Calculated from the patient date of birth' },
   { name: 'body_temperature', label: 'Body temperature (°F)', min: 95, max: 106, step: 0.1, hint: 'Normal ≈ 97–99.5' },
   { name: 'heart_rate', label: 'Heart rate (bpm)', min: 40, max: 200, step: 1 },
   { name: 'systolic_bp', label: 'Systolic blood pressure (mm Hg)', min: 70, max: 250, step: 1 },
@@ -30,16 +30,26 @@ const SYMPTOMS = [
   ['dizziness_fainting', 'Dizziness / fainting'],
 ]
 
-const initialValues = () => ({
+function ageFrom(dateOfBirth) {
+  if (!dateOfBirth) return ''
+  const dob = new Date(dateOfBirth)
+  const today = new Date()
+  let age = today.getFullYear() - dob.getFullYear()
+  const month = today.getMonth() - dob.getMonth()
+  if (month < 0 || (month === 0 && today.getDate() < dob.getDate())) age -= 1
+  return age >= 0 ? age : ''
+}
+
+const initialValues = (patient) => ({
   visit_date: new Date().toISOString().slice(0, 10),
   gestational_week: '',
-  age: '', body_temperature: '', heart_rate: '', systolic_bp: '',
+  age: ageFrom(patient?.date_of_birth), body_temperature: '', heart_rate: '', systolic_bp: '',
   diastolic_bp: '', bmi: '', hba1c: '', fasting_glucose: '',
   symptoms: ['none'], notes: '',
 })
 
 export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant }) {
-  const [form, setForm] = useState(initialValues)
+  const [form, setForm] = useState(() => initialValues(patient))
   const [errors, setErrors] = useState({})
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -49,6 +59,10 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
     () => `${patient?.patient_code || ''}${patient?.full_name ? ` · ${patient.full_name}` : ''}`,
     [patient],
   )
+
+  useEffect(() => {
+    setForm((current) => ({ ...current, age: ageFrom(patient?.date_of_birth) }))
+  }, [patient?.date_of_birth])
 
   function set(k, v) { setForm((f) => ({ ...f, [k]: v })) }
 
@@ -95,7 +109,7 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
       for (const f of FIELDS) payload[f.name] = Number(payload[f.name])
       const data = await assessmentService.create(payload)
       setResult(data)
-      setForm(initialValues())
+      setForm(initialValues(patient))
     } catch (err) {
       const e2 = apiError(err)
       if (e2.details && typeof e2.details === 'object') {
@@ -144,7 +158,8 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
               <label className="field" key={f.name}>
                 <span>{f.label}</span>
                 <input type="number" inputMode="decimal" min={f.min} max={f.max} step={f.step}
-                       value={form[f.name]} onChange={(e) => set(f.name, e.target.value)} required />
+                       value={form[f.name]} onChange={(e) => set(f.name, e.target.value)}
+                       readOnly={f.name === 'age'} required />
                 {f.hint && <small className="field-hint">{f.hint}</small>}
                 {errors[f.name] && <em className="field-error">{errors[f.name]}</em>}
               </label>
@@ -195,7 +210,10 @@ function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAs
       <div className="card result-card">
         <div className="result-head">
           <div>
-            <div className="muted small">{patientLabel} · assessment on {result.assessment.visit_date}</div>
+            <div className="muted small">
+              {patientLabel} · assessment on {result.assessment.visit_date}
+              {result.assessment.assessed_by && <> · assessed by {result.assessment.assessed_by}</>}
+            </div>
             <RiskBadge level={result.risk_level} size="lg" />
           </div>
           <div className="result-probs">
@@ -209,6 +227,7 @@ function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAs
           </div>
         </div>
         <p className="muted small">
+          Assessed by {result.assessment.assessed_by || 'Unknown'} · {' '}
           Model: {result.model?.name} {result.model?.version} · confidence {Math.round(result.probability * 100)}%
         </p>
       </div>

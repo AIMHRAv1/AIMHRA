@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import { assessmentService, patientService, reportService } from '../../services/auth'
 import { apiError } from '../../api/client'
 import { RiskTrendChart, ShapBars } from '../../charts'
@@ -12,7 +13,7 @@ import AlertsPanel from '../../components/patient/AlertsPanel'
 import ReportsPanel from '../../components/patient/ReportsPanel'
 import { downloadReport } from '../../utils/reportDownload'
 
-const TABS = [
+const ALL_TABS = [
   { key: 'overview', label: 'Overview', icon: '▦' },
   { key: 'info', label: 'Patient Information', icon: '👤' },
   { key: 'assessment', label: 'New Assessment', icon: '＋' },
@@ -33,10 +34,13 @@ function computeAge(dateOfBirth) {
 }
 
 export default function PatientDetail() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
+  const tabs = isAdmin ? ALL_TABS.filter((t) => ['overview', 'assessment'].includes(t.key)) : ALL_TABS
   const { id: idParam } = useParams()
   const id = Number(idParam)
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = TABS.some((t) => t.key === searchParams.get('tab')) ? searchParams.get('tab') : 'overview'
+  const tab = tabs.some((t) => t.key === searchParams.get('tab')) ? searchParams.get('tab') : 'overview'
 
   const [patient, setPatient] = useState(null)
   const [trend, setTrend] = useState(null)
@@ -99,6 +103,9 @@ export default function PatientDetail() {
     </div>
   )
   if (!patient) return <div className="page"><Loading /></div>
+  if (isAdmin) {
+    return <AdminPatientView patient={patient} tab={tab} tabs={tabs} setTab={setTab} />
+  }
 
   const series = trend?.series ?? []
   const t = trend?.trend
@@ -137,7 +144,7 @@ export default function PatientDetail() {
       </header>
 
       <nav className="tabs" aria-label="Patient workspace">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t.key} className={`tab${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
             <span aria-hidden="true">{t.icon}</span> {t.label}
           </button>
@@ -174,6 +181,45 @@ export default function PatientDetail() {
       </div>
     </div>
   )
+}
+
+function AdminPatientView({ patient, tab, tabs, setTab }) {
+ return (
+   <div className="page">
+     <header className="page-head">
+       <div>
+         <div className="muted small"><Link to="/app/patients">← All patients</Link></div>
+         <h1>{patient.patient_code}</h1>
+         <p className="muted">Administrator patient view</p>
+       </div>
+       <div className="quick-actions">
+         <span className="muted small">Risk tier </span>
+         {patient.current_risk ? <RiskBadge level={patient.current_risk} size="lg" /> : <span className="muted">—</span>}
+         <button className="btn btn-primary" onClick={() => setTab('assessment')}>＋ Assess</button>
+       </div>
+     </header>
+     <nav className="tabs" aria-label="Patient workspace">
+       {tabs.map((t) => (
+         <button key={t.key} className={`tab${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
+           <span aria-hidden="true">{t.icon}</span> {t.label}
+         </button>
+       ))}
+     </nav>
+     <div className="tab-panel">
+       {tab === 'overview' && (
+         <div className="stat-grid">
+           <StatCard label="Patient code" value={patient.patient_code} />
+           <StatCard label="Assigned healthcare worker" value={patient.assigned_healthcare_worker || 'Unassigned'} />
+           <StatCard label="Risk tier" value={patient.current_risk ? <RiskBadge level={patient.current_risk} /> : '—'} />
+           <StatCard label="Assessments" value={patient.assessment_count ?? 0} />
+         </div>
+       )}
+       {tab === 'assessment' && (
+         <AssessmentPanel patient={patient} onViewHistory={() => setTab('overview')} onAskAssistant={() => setTab('overview')} />
+       )}
+     </div>
+   </div>
+ )
 }
 
 function OverviewTab({
@@ -252,7 +298,7 @@ function OverviewTab({
                 <div>
                   <RiskBadge level={selected.prediction.risk_level} size="lg" />
                   <p className="muted small">
-                    Confidence {Math.round(selected.prediction.probability * 100)}% · model {selected.prediction.model.name} {selected.prediction.model.version}
+                    Assessed by {selected.assessed_by || 'Unknown'} · Confidence {Math.round(selected.prediction.probability * 100)}% · model {selected.prediction.model.name} {selected.prediction.model.version}
                   </p>
                   <dl className="kv">
                     <div><dt>Visit date</dt><dd>{selected.visit_date}</dd></div>
@@ -270,6 +316,7 @@ function OverviewTab({
                 </div>
                 <div>
                   <h3 className="section-title">SHAP explanation</h3>
+                  <p className="muted small">Assessment performed by {selected.assessed_by || 'Unknown'}</p>
                   <ShapBars features={selected.prediction.explanation?.features} />
                   <Disclaimer text={selected.prediction.explanation?.disclaimer} />
                 </div>

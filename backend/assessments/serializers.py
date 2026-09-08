@@ -14,13 +14,16 @@ class AssessmentSerializer(serializers.ModelSerializer):
     """
 
     prediction = serializers.SerializerMethodField()
+    assessed_by = serializers.SerializerMethodField()
+    patient_code = serializers.CharField(source="patient.patient_code", read_only=True)
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
 
     class Meta:
         model = Assessment
         fields = [
-            "id", "patient", "visit_date", "gestational_week", "age", "body_temperature",
+            "id", "patient", "patient_code", "patient_name", "visit_date", "gestational_week", "age", "body_temperature",
             "heart_rate", "systolic_bp", "diastolic_bp", "bmi", "hba1c", "fasting_glucose",
-            "symptoms", "notes", "created_at", "prediction",
+            "symptoms", "notes", "created_at", "assessed_by", "prediction",
         ]
         read_only_fields = ["id", "patient", "created_at", "prediction"]
 
@@ -35,6 +38,11 @@ class AssessmentSerializer(serializers.ModelSerializer):
             "model": {"name": pred.model_name, "version": pred.model_version},
             "explanation": pred.explanation,
         }
+
+    def get_assessed_by(self, obj):
+        if obj.created_by is None:
+            return None
+        return obj.created_by.full_name or obj.created_by.username
 
     def validate_visit_date(self, value):
         if value > timezone.localdate():

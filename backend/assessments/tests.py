@@ -203,34 +203,35 @@ class AssessmentAPITests(TestCase):
         )
         self.assertEqual(r.status_code, 400)
 
-    def test_worker_cannot_assess_another_workers_patient(self):
+    def test_worker_can_assess_shared_patient(self):
         self.auth(self.worker)
-        r = self.client.post(
-            "/api/assessments/",
-            {**VALID_PAYLOAD, "patient": self.other_profile.id},
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 403)
-        self.assertFalse(Assessment.objects.filter(patient=self.other_profile).exists())
-
-    def test_worker_can_access_assigned_patient(self):
-        self.auth(self.worker)
-        r = self.client.get(f"/api/assessments/risk-history/?patient={self.assigned_profile.id}")
-        self.assertEqual(r.status_code, 200)
-
-    def test_worker_cannot_read_unauthorized_patient(self):
-        self.auth(self.worker)
-        r = self.client.get(f"/api/assessments/risk-history/?patient={self.other_profile.id}")
-        self.assertEqual(r.status_code, 403)
-
-    def test_admin_can_assess_any_patient(self):
-        self.auth(self.admin)
         r = self.client.post(
             "/api/assessments/",
             {**VALID_PAYLOAD, "patient": self.other_profile.id},
             content_type="application/json",
         )
         self.assertEqual(r.status_code, 201)
+        self.assertTrue(Assessment.objects.filter(patient=self.other_profile).exists())
+        self.assertEqual(r.json()["data"]["assessment"]["assessed_by"], self.worker.username)
+
+    def test_worker_can_access_assigned_patient(self):
+        self.auth(self.worker)
+        r = self.client.get(f"/api/assessments/risk-history/?patient={self.assigned_profile.id}")
+        self.assertEqual(r.status_code, 200)
+
+    def test_worker_can_read_shared_patient(self):
+        self.auth(self.worker)
+        r = self.client.get(f"/api/assessments/risk-history/?patient={self.other_profile.id}")
+        self.assertEqual(r.status_code, 200)
+
+    def test_admin_cannot_assess_patient(self):
+        self.auth(self.admin)
+        r = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.other_profile.id},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 403)
 
     def test_history_and_trend_endpoints(self):
         self.auth(self.worker)

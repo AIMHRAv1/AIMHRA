@@ -160,6 +160,23 @@ input:focus, textarea:focus, select:focus { outline: 2px solid #9cc3d2; border-c
 .cell-message { max-width: 380px; }
 .cell-detail { max-width: 320px; overflow-wrap: anywhere; }
 .cell-actions { display: flex; gap: 6px; }
+.patient-list-card { padding: 0; overflow: hidden; }
+.patient-list-summary {
+  display: flex; align-items: baseline; gap: 10px; padding: 15px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.table-scroll { overflow-x: auto; }
+.patient-table { min-width: 980px; }
+.patient-table th, .patient-table td { white-space: nowrap; }
+.patient-table th { padding: 11px 12px; background: #f7fafb; }
+.patient-table td { padding: 11px 12px; }
+.patient-table .patient-identity { min-width: 190px; white-space: normal; }
+.patient-identity a { display: block; color: var(--brand); text-decoration: none; }
+.patient-identity a:hover { text-decoration: underline; }
+.patient-table .numeric-cell { text-align: center; font-variant-numeric: tabular-nums; }
+.patient-table .risk-badge { white-space: nowrap; }
+.patient-table .cell-actions { justify-content: flex-end; }
+.patient-list-admin .patient-table { min-width: 720px; }
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
 
 /* ---------- Assessment form ---------- */

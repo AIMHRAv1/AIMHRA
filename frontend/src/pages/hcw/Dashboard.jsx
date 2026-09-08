@@ -131,7 +131,12 @@ export default function HcwDashboard() {
               {recent.map((a) => (
                 <tr key={a.id}>
                   <td>{a.visit_date}</td>
-                  <td>{a.patient_name ? `${a.patient_code ?? ''} · ${a.patient_name}` : `#${a.patient}`}</td>
+                  <td>
+                    <Link to={`/app/patients/${a.patient}?tab=overview`}>
+                      {a.patient_code || 'Unknown patient'}
+                    </Link>
+                    {a.patient_name && <span className="muted small"> · {a.patient_name}</span>}
+                  </td>
                   <td>{a.prediction && <RiskBadge level={a.prediction.risk_level} />}</td>
                   <td>{a.prediction ? `${Math.round(a.prediction.probability * 100)}%` : '—'}</td>
                   <td><Link className="btn btn-small btn-secondary" to={`/app/patients/${a.patient}?tab=overview`}>Open</Link></td>

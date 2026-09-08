@@ -6,6 +6,7 @@ from assessments.models import Assessment
 from audit.services import log_event
 from core.exceptions import ApiError
 from core.responses import ok
+from core.permissions import IsHealthcareWorkerOnly
 from patients.models import PatientProfile
 from patients.selectors import can_access_patient, patient_ids_for_healthcare_worker
 from reports.models import Report
@@ -24,6 +25,7 @@ class ReportSerializer(serializers.ModelSerializer):
 
 
 class ReportListCreateView(APIView):
+    permission_classes = [IsHealthcareWorkerOnly]
     def get(self, request):
         user = request.user
         qs = Report.objects.select_related("patient", "assessment").order_by("-created_at")
@@ -57,6 +59,7 @@ class ReportListCreateView(APIView):
 
 
 class ReportDownloadView(APIView):
+    permission_classes = [IsHealthcareWorkerOnly]
     def get(self, request, pk):
         report = get_object_or_404(Report.objects.select_related("patient"), pk=pk)
         if not can_access_patient(request.user, report.patient):

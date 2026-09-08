@@ -101,7 +101,7 @@ def prediction_series(patient):
     """Serialized predictions for a patient, oldest first."""
     rows = (
         Prediction.objects.filter(assessment__patient=patient)
-        .select_related("assessment")
+        .select_related("assessment", "assessment__created_by")
         .order_by("assessment__visit_date", "id")
     )
     return [
@@ -112,6 +112,10 @@ def prediction_series(patient):
             "model": f"{p.model_name} {p.model_version}",
             "visit_date": p.assessment.visit_date.isoformat(),
             "gestational_week": p.assessment.gestational_week,
+            "assessed_by": (
+                p.assessment.created_by.full_name or p.assessment.created_by.username
+                if p.assessment.created_by else None
+            ),
         }
         for p in rows
     ]
@@ -125,6 +129,10 @@ def build_response(assessment, prediction, rules_out, alerts, trend):
             "gestational_week": assessment.gestational_week,
             "symptoms": assessment.symptoms,
             "notes": assessment.notes,
+            "assessed_by": (
+                assessment.created_by.full_name or assessment.created_by.username
+                if assessment.created_by else None
+            ),
         },
         "risk_level": prediction.risk_level,
         "probability": prediction.probability,

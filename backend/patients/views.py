@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 
 from audit import services as audit_svc
 from core.exceptions import ApiError
-from core.permissions import IsAdmin
+from core.permissions import IsAdmin, IsHealthcareWorkerOnly, IsPatientListAccess
 from core.responses import ok
 from patients.models import PatientAssignment, PatientProfile
 from patients.selectors import (
@@ -25,6 +25,7 @@ class PatientListView(generics.ListCreateAPIView):
     """
 
     serializer_class = PatientProfileSerializer
+    permission_classes = [IsPatientListAccess]
 
     def get_queryset(self):
         qs = scoped_patient_queryset(self.request.user)
@@ -57,17 +58,26 @@ class PatientListView(generics.ListCreateAPIView):
             request, "PATIENT_CREATED", target_type="patient", target_id=str(patient.id),
             detail={"patient_code": patient.patient_code},
         )
-        return ok(PatientProfileSerializer(patient).data, status=201)
+        return ok(
+            PatientProfileSerializer(
+                patient, context=self.get_serializer_context()
+            ).data,
+            status=201,
+        )
 
 
 class PatientDetailView(generics.RetrieveUpdateAPIView):
     """GET/PATCH one patient record with authorization enforcement."""
 
     serializer_class = PatientProfileSerializer
+    permission_classes = [IsHealthcareWorkerOnly]
 
     def get_object(self):
         user = self.request.user
-        profile = get_object_or_404(PatientProfile, pk=self.kwargs["pk"])
+        profile = get_object_or_404(
+            PatientProfile.objects.prefetch_related("assigned_workers"),
+            pk=self.kwargs["pk"],
+        )
         if not can_access_patient(self.request.user, profile):
             raise ApiError("You are not authorized to access this patient.", code="PERMISSION_DENIED", status_code=403)
         # Attach the summary so detail responses carry current-risk context too.
@@ -92,6 +102,37 @@ class PatientDetailView(generics.RetrieveUpdateAPIView):
             detail={"patient_code": updated.patient_code},
         )
         return ok(self.get_serializer(updated).data)
+
+
+class AdminPatientHistoryView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request, pk):
+        from assessments.models import Assessment
+
+        patient = get_object_or_404(PatientProfile, pk=pk)
+        assessments = Assessment.objects.filter(patient=patient).select_related(
+            "created_by", "prediction"
+        ).order_by("-visit_date", "-id")
+        return ok({
+            "patient": {
+                "id": patient.id,
+                "patient_code": patient.patient_code,
+                "assessment_count": assessments.count(),
+            },
+            "assessments": [
+                {
+                    "id": assessment.id,
+                    "visit_date": assessment.visit_date.isoformat(),
+                    "risk_level": getattr(assessment.prediction, "risk_level", None),
+                    "assessed_by": (
+                        assessment.created_by.full_name or assessment.created_by.username
+                        if assessment.created_by else None
+                    ),
+                }
+                for assessment in assessments
+            ],
+        })
 
 
 class PatientAssignmentListView(generics.ListCreateAPIView):

@@ -8,7 +8,7 @@ from assessments.services import DISCLAIMER, create_assessment, prediction_serie
 from assessments.trends import compute_trend
 from core.exceptions import ApiError
 from core.responses import ok
-from core.permissions import IsHealthcareWorker
+from core.permissions import IsHealthcareWorkerOnly
 from patients.models import PatientProfile
 from patients.selectors import can_access_patient
 
@@ -32,9 +32,12 @@ def _resolve_patient(request):
 
 class AssessmentListCreateView(generics.ListCreateAPIView):
     serializer_class = AssessmentSerializer
+    permission_classes = [IsHealthcareWorkerOnly]
 
     def get_queryset(self):
-        qs = Assessment.objects.select_related("prediction", "patient").prefetch_related("alerts")
+        qs = Assessment.objects.select_related(
+            "prediction", "patient", "created_by"
+        ).prefetch_related("alerts")
         user = self.request.user
         if user.role != "ADMIN":
             from patients.selectors import patient_ids_for_healthcare_worker
@@ -66,10 +69,13 @@ class AssessmentListCreateView(generics.ListCreateAPIView):
 
 class AssessmentDetailView(generics.RetrieveAPIView):
     serializer_class = AssessmentSerializer
+    permission_classes = [IsHealthcareWorkerOnly]
 
     def get_object(self):
         assessment = get_object_or_404(
-            Assessment.objects.select_related("prediction", "patient"), pk=self.kwargs["pk"]
+            Assessment.objects.select_related(
+                "prediction", "patient", "created_by"
+            ), pk=self.kwargs["pk"]
         )
         if not can_access_patient(self.request.user, assessment.patient):
             raise ApiError("You are not authorized to access this assessment.", code="PERMISSION_DENIED", status_code=403)
@@ -78,6 +84,7 @@ class AssessmentDetailView(generics.RetrieveAPIView):
 
 class RiskHistoryView(APIView):
     """Chronological prediction series for the resolved patient."""
+    permission_classes = [IsHealthcareWorkerOnly]
 
     def get(self, request):
         patient = _resolve_patient(request)
@@ -86,6 +93,7 @@ class RiskHistoryView(APIView):
 
 class RiskTrendView(APIView):
     """Trend analytics over the prediction series."""
+    permission_classes = [IsHealthcareWorkerOnly]
 
     def get(self, request):
         patient = _resolve_patient(request)
@@ -106,6 +114,7 @@ class RiskTrendView(APIView):
 
 class AlertListView(generics.ListAPIView):
     serializer_class = AlertSerializer
+    permission_classes = [IsHealthcareWorkerOnly]
 
     def get_queryset(self):
         user = self.request.user
@@ -133,7 +142,7 @@ class AlertListView(generics.ListAPIView):
 class AlertAckView(APIView):
     """Healthcare workers acknowledge/resolve alerts."""
 
-    permission_classes = [IsHealthcareWorker]
+    permission_classes = [IsHealthcareWorkerOnly]
 
     def post(self, request, pk):
         alert = get_object_or_404(Alert, pk=pk)

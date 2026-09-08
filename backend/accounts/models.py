@@ -1,5 +1,11 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.db import models
+
+
+class UserManager(DjangoUserManager):
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        extra_fields["role"] = self.model.ROLE_ADMIN
+        return super().create_superuser(username, email, password, **extra_fields)
 
 
 class User(AbstractUser):
@@ -21,8 +27,12 @@ class User(AbstractUser):
     # Required on registration so admins can review who signed up.
     full_name = models.CharField(max_length=128, blank=True, default="")
 
+    objects = UserManager()
+
     def save(self, *args, **kwargs):
-        # Staff flag is derived from role; admins never come from self-registration.
+        # Django superusers must also be application administrators.
+        if self.is_superuser:
+            self.role = self.ROLE_ADMIN
         self.is_staff = self.role == self.ROLE_ADMIN
         super().save(*args, **kwargs)
 

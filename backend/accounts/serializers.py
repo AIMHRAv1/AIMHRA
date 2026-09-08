@@ -3,6 +3,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.db.models import Q
 
 from accounts.models import User
 
@@ -20,18 +21,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         from audit import services as audit_svc
 
+        failure_reason = "invalid_credentials"
         try:
             data = super().validate(attrs)
             if self.user.role not in (User.ROLE_HEALTHCARE_WORKER, User.ROLE_ADMIN):
                 # Legacy / unexpected roles (e.g. a pre-migration PATIENT account)
                 # must never authenticate through the application login flow.
-                audit_svc.log_event(
-                    self.context.get("request"),
-                    "LOGIN_FAILED",
-                    target_type="user",
-                    target_id=str(self.user.id),
-                    detail={"reason": "role_not_allowed"},
-                )
+                failure_reason = "role_not_allowed"
                 raise AuthenticationFailed("No active account found with the given credentials.")
         except Exception:
             audit_svc.log_event(
@@ -39,6 +35,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 "LOGIN_FAILED",
                 target_type="user",
                 target_id=attrs.get("username", ""),
+                detail={"reason": failure_reason},
             )
             raise
         audit_svc.log_event(
@@ -100,7 +97,16 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 class UserAdminSerializer(serializers.ModelSerializer):
     """Admin-facing user serializer (role editing allowed)."""
 
+    patients_handled_count = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ["id", "username", "email", "full_name", "phone", "role", "is_active", "date_joined"]
+        fields = ["id", "username", "email", "full_name", "phone", "role", "is_active", "date_joined", "patients_handled_count"]
         read_only_fields = ["id", "date_joined"]
+
+    def get_patients_handled_count(self, user):
+        from patients.models import PatientProfile
+
+        return PatientProfile.objects.filter(
+            Q(created_by=user) | Q(assigned_workers__healthcare_worker=user)
+        ).distinct().count()

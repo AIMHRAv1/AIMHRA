@@ -26,6 +26,16 @@ class RoleModelTests(TestCase):
         user = make_user("fresh")
         self.assertEqual(user.role, "HEALTHCARE_WORKER")
 
+    def test_superuser_is_created_as_admin(self):
+        user = User.objects.create_superuser(
+            username="superadmin",
+            email="superadmin@test.com",
+            password="Str0ng!Pass1",
+        )
+        self.assertEqual(user.role, User.ROLE_ADMIN)
+        self.assertTrue(user.is_staff)
+        self.assertTrue(user.is_superuser)
+
 
 class AuthFlowTests(TestCase):
     def login(self, username, password):
@@ -55,6 +65,16 @@ class AuthFlowTests(TestCase):
     def test_admin_can_log_in(self):
         make_user("admin1", role="ADMIN")
         r = self.login("admin1", "Str0ng!Pass1")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["user"]["role"], "ADMIN")
+
+    def test_superuser_can_log_in_as_admin(self):
+        User.objects.create_superuser(
+            username="superadmin1",
+            email="superadmin1@test.com",
+            password="Str0ng!Pass1",
+        )
+        r = self.login("superadmin1", "Str0ng!Pass1")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["user"]["role"], "ADMIN")
 

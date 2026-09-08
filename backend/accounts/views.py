@@ -1,6 +1,7 @@
 import logging
 
 from rest_framework import generics, permissions, status
+from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -144,3 +145,27 @@ class UserManagementDetailView(generics.RetrieveUpdateDestroyAPIView):
             self.request, "USER_UPDATED", target_type="user", target_id=str(instance.id),
             detail={"deactivated": True},
         )
+
+
+class AdminWorkerProfileView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request, pk):
+        from assessments.models import Assessment
+
+        user = get_object_or_404(User, pk=pk, role=User.ROLE_HEALTHCARE_WORKER)
+        assessments = Assessment.objects.filter(created_by=user).select_related(
+            "patient", "prediction"
+        ).order_by("-visit_date", "-id")
+        return Response({
+            "user": UserAdminSerializer(user).data,
+            "assessments": [
+                {
+                    "id": assessment.id,
+                    "patient_code": assessment.patient.patient_code,
+                    "visit_date": assessment.visit_date.isoformat(),
+                    "risk_level": getattr(assessment.prediction, "risk_level", None),
+                }
+                for assessment in assessments
+            ],
+        })
