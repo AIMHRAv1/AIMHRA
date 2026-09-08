@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { apiError } from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 
@@ -50,8 +50,8 @@ export default function Login() {
         <button className="btn btn-primary btn-block" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
-        <p className="auth-alt">
-          New patient? <Link to="/register">Create an account</Link>
+        <p className="auth-alt muted small">
+          This system is for <strong>Healthcare Workers</strong> and <strong>Administrators</strong>.
         </p>
         <p className="disclaimer">Decision-support system for education and screening support — not a replacement for professional medical care.</p>
       </form>

@@ -46,6 +46,28 @@ def error_response(code, message, details=None, status_code=400):
     )
 
 
+def flatten_error_messages(detail):
+    """Flatten nested DRF error detail (dicts / lists / ErrorDetail) into one
+    human-readable message so validation errors are never hidden behind a
+    generic banner."""
+    messages = []
+
+    def collect(value):
+        if isinstance(value, str):
+            messages.append(value)
+        elif isinstance(value, dict):
+            for v in value.values():
+                collect(v)
+        elif isinstance(value, (list, tuple)):
+            for v in value:
+                collect(v)
+        elif value is not None:
+            messages.append(str(value))
+
+    collect(detail)
+    return " ".join(m.strip() for m in messages if m.strip()) or "Request could not be processed."
+
+
 def structured_exception_handler(exc, context):
     """DRF exception handler producing the project-wide error envelope."""
     if isinstance(exc, Http404):
@@ -65,11 +87,7 @@ def structured_exception_handler(exc, context):
             code = "AUTHENTICATION_ERROR"
         elif isinstance(exc, exceptions.AuthenticationFailed):
             code = "AUTHENTICATION_ERROR"
-        message = (
-            exc.detail
-            if isinstance(exc.detail, str)
-            else "Request could not be processed."
-        )
+        message = flatten_error_messages(exc.detail)
         return error_response(code, message, details, exc.status_code)
     # Unhandled exception: log it, never leak stack traces to the client.
     logger.exception("Unhandled API error in %s", context.get("view"), exc_info=exc)

@@ -27,8 +27,8 @@ export default function AdminDashboard() {
       </header>
 
       <div className="stat-grid">
-        <StatCard label="Users" value={stats.users?.total ?? 0}
-                  sub={`${stats.users?.by_role?.PATIENT ?? 0} patients · ${stats.users?.by_role?.HEALTHCARE_WORKER ?? 0} workers · ${stats.users?.by_role?.ADMIN ?? 0} admins`} />
+        <StatCard label="Staff users" value={stats.users?.total ?? 0}
+                  sub={`${stats.users?.by_role?.HEALTHCARE_WORKER ?? 0} healthcare workers · ${stats.users?.by_role?.ADMIN ?? 0} admins`} />
         <StatCard label="Assessments" value={stats.assessments} sub={`${stats.predictions} predictions`} />
         <StatCard label="Open alerts" value={stats.alerts?.open ?? 0} tone={stats.alerts?.open ? 'warn' : undefined} />
         <StatCard label="Production model"

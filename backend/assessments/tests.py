@@ -1,16 +1,17 @@
 """Assessment workflow tests: validation, permissions, isolation, rule engine,
-trends."""
+trends. Patients are standalone records owned/assigned to healthcare workers."""
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from assessments.models import Alert, Assessment
+from assessments.models import Alert, Assessment, Prediction
 from assessments.rules import evaluate as rules_evaluate
 from assessments.rules.engine import load_rules
 from assessments.rules.keywords import detect_symptoms
 from assessments.trends import compute_trend
 from patients.models import PatientAssignment, PatientProfile
+
 
 VALID_PAYLOAD = {
     "visit_date": "2026-08-19", "gestational_week": 20,
@@ -21,10 +22,14 @@ VALID_PAYLOAD = {
 }
 
 
-def make_user(username, role="PATIENT", password="Passw0rd!42"):
+def make_user(username, role="HEALTHCARE_WORKER", password="Passw0rd!42"):
     return User.objects.create_user(
         username=username, email=f"{username}@example.com", password=password, role=role
     )
+
+
+def make_patient(full_name="A Patient"):
+    return PatientProfile.objects.create(full_name=full_name)
 
 
 class RuleEngineTests(TestCase):
@@ -106,13 +111,20 @@ class AssessmentAPITests(TestCase):
                 status="PRODUCTION" if r is best else "CANDIDATE",
             )
 
-        cls.patient_user = make_user("pat1")
-        cls.other_patient = make_user("pat2")
-        cls.worker = make_user("worker1", role="HEALTHCARE_WORKER")
+        cls.worker = make_user("worker1")
+        cls.other_worker = make_user("worker2")
         cls.admin = make_user("admin1", role="ADMIN")
-        cls.profile = PatientProfile.objects.create(user=cls.patient_user)
-        cls.other_profile = PatientProfile.objects.create(user=cls.other_patient)
-        PatientAssignment.objects.create(healthcare_worker=cls.worker, patient=cls.profile)
+        cls.profile = make_patient("Owned Patient")
+        cls.assigned_profile = make_patient("Assigned Patient")
+        cls.other_profile = make_patient("Other Worker Patient")
+
+        # worker1 created the first patient and is assigned the second.
+        cls.profile.created_by = cls.worker
+        cls.profile.save(update_fields=["created_by"])
+        PatientAssignment.objects.create(healthcare_worker=cls.worker, patient=cls.assigned_profile)
+        # other_worker created the third patient.
+        cls.other_profile.created_by = cls.other_worker
+        cls.other_profile.save(update_fields=["created_by"])
 
     def setUp(self):
         self.client = APIClient()
@@ -124,94 +136,147 @@ class AssessmentAPITests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         return token
 
-    def test_patient_can_create_assessment(self):
-        self.auth(self.patient_user)
-        r = self.client.post("/api/assessments/", VALID_PAYLOAD, content_type="application/json")
+    def test_worker_can_assess_patient_they_created(self):
+        self.auth(self.worker)
+        r = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.profile.id},
+            content_type="application/json",
+        )
         self.assertEqual(r.status_code, 201, r.content)
         data = r.json()["data"] or r.json()
         self.assertIn(data["risk_level"], ("low risk", "mid risk", "high risk"))
         self.assertTrue(Assessment.objects.filter(patient=self.profile).exists())
+        self.assertTrue(Prediction.objects.filter(assessment__patient=self.profile).exists())
 
     def test_emergency_assessment_creates_alert(self):
-        self.auth(self.patient_user)
-        payload = {**VALID_PAYLOAD, "systolic_bp": 172, "symptoms": ["severe_headache"]}
+        self.auth(self.worker)
+        payload = {**VALID_PAYLOAD, "patient": self.profile.id, "systolic_bp": 172, "symptoms": ["severe_headache"]}
         r = self.client.post("/api/assessments/", payload, content_type="application/json")
-        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.status_code, 201, r.content)
         data = r.json()["data"]
         self.assertEqual(data["rules"]["category"], "EMERGENCY")
         self.assertEqual(Alert.objects.filter(patient=self.profile, category="EMERGENCY").count(), 1)
 
+    def test_shap_explanation_persisted(self):
+        self.auth(self.worker)
+        r = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.profile.id},
+            content_type="application/json",
+        )
+        pred = Prediction.objects.get(assessment_id=r.json()["data"]["assessment"]["id"])
+        self.assertIn("features", pred.explanation)
+
     def test_out_of_range_values_rejected(self):
-        self.auth(self.patient_user)
+        self.auth(self.worker)
         for field, value in [("age", 300), ("heart_rate", 999), ("systolic_bp", -5)]:
-            r = self.client.post("/api/assessments/", {**VALID_PAYLOAD, field: value}, content_type="application/json")
+            r = self.client.post(
+                "/api/assessments/",
+                {**VALID_PAYLOAD, "patient": self.profile.id, field: value},
+                content_type="application/json",
+            )
             self.assertEqual(r.status_code, 400, f"{field}={value} should fail")
             self.assertFalse(r.json().get("success", True))
 
     def test_diastolic_above_systolic_rejected(self):
-        self.auth(self.patient_user)
-        payload = {**VALID_PAYLOAD, "systolic_bp": 100, "diastolic_bp": 120}
+        self.auth(self.worker)
+        payload = {**VALID_PAYLOAD, "patient": self.profile.id, "systolic_bp": 100, "diastolic_bp": 120}
         r = self.client.post("/api/assessments/", payload, content_type="application/json")
         self.assertEqual(r.status_code, 400)
 
     def test_unknown_symptom_rejected(self):
-        self.auth(self.patient_user)
-        r = self.client.post("/api/assessments/", {**VALID_PAYLOAD, "symptoms": ["alien_disease"]},
-                             content_type="application/json")
+        self.auth(self.worker)
+        r = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.profile.id, "symptoms": ["alien_disease"]},
+            content_type="application/json",
+        )
         self.assertEqual(r.status_code, 400)
 
     def test_future_visit_date_rejected(self):
-        self.auth(self.patient_user)
-        r = self.client.post("/api/assessments/", {**VALID_PAYLOAD, "visit_date": "2099-01-01"},
-                             content_type="application/json")
+        self.auth(self.worker)
+        r = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.profile.id, "visit_date": "2099-01-01"},
+            content_type="application/json",
+        )
         self.assertEqual(r.status_code, 400)
 
-    def test_patient_isolation(self):
-        self.auth(self.other_patient)
-        r = self.client.post("/api/assessments/", VALID_PAYLOAD, content_type="application/json")
-        self.assertEqual(r.status_code, 201)
-        self.auth(self.patient_user)
-        r = self.client.get("/api/assessments/risk-history/")
-        # pat1 has no assessments; pat2's data must not leak
-        history = (r.json().get("data") or r.json())["history"]
-        self.assertEqual(len(history), 0)
-
-    def test_worker_access_requires_assignment(self):
-        Assessment.objects.create(patient=self.profile, visit_date="2026-08-01", **{
-            k: v for k, v in VALID_PAYLOAD.items() if k in (
-                "age", "body_temperature", "heart_rate", "systolic_bp", "diastolic_bp",
-                "bmi", "hba1c", "fasting_glucose")
-        })
+    def test_worker_cannot_assess_another_workers_patient(self):
         self.auth(self.worker)
-        # assigned patient -> 200
-        r = self.client.get("/api/assessments/risk-history/?patient=" + str(self.profile.id))
+        r = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.other_profile.id},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(Assessment.objects.filter(patient=self.other_profile).exists())
+
+    def test_worker_can_access_assigned_patient(self):
+        self.auth(self.worker)
+        r = self.client.get(f"/api/assessments/risk-history/?patient={self.assigned_profile.id}")
         self.assertEqual(r.status_code, 200)
-        # unassigned patient -> 403
-        r = self.client.get("/api/assessments/risk-history/?patient=" + str(self.other_profile.id))
+
+    def test_worker_cannot_read_unauthorized_patient(self):
+        self.auth(self.worker)
+        r = self.client.get(f"/api/assessments/risk-history/?patient={self.other_profile.id}")
         self.assertEqual(r.status_code, 403)
 
-    def test_worker_cannot_create_for_unassigned(self):
-        self.auth(self.worker)
-        r = self.client.post("/api/assessments/", {**VALID_PAYLOAD, "patient": self.other_profile.id},
-                             content_type="application/json")
-        self.assertEqual(r.status_code, 403)
+    def test_admin_can_assess_any_patient(self):
+        self.auth(self.admin)
+        r = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.other_profile.id},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
 
     def test_history_and_trend_endpoints(self):
-        self.auth(self.patient_user)
-        self.client.post("/api/assessments/", VALID_PAYLOAD, content_type="application/json")
-        r = self.client.get("/api/assessments/risk-history/")
+        self.auth(self.worker)
+        self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.profile.id},
+            content_type="application/json",
+        )
+        r = self.client.get(f"/api/assessments/risk-history/?patient={self.profile.id}")
         data = r.json()["data"] or r.json()
         self.assertEqual(len(data["history"]), 1)
-        r = self.client.get("/api/assessments/risk-trends/")
+        r = self.client.get(f"/api/assessments/risk-trends/?patient={self.profile.id}")
         data = r.json()["data"] or r.json()
         self.assertEqual(data["trend"]["status"], "baseline")
+        self.assertIn("does not predict future risk", data["disclaimer"])
+
+    def test_trend_is_descriptive_not_predictive(self):
+        self.auth(self.worker)
+        for visit, bp in [("2026-07-01", 118), ("2026-08-01", 125)]:
+            self.client.post(
+                "/api/assessments/",
+                {**VALID_PAYLOAD, "patient": self.profile.id, "visit_date": visit, "systolic_bp": bp},
+                content_type="application/json",
+            )
+        r = self.client.get(f"/api/assessments/risk-trends/?patient={self.profile.id}")
+        data = r.json()["data"] or r.json()
+        self.assertEqual(data["trend"]["visits"], 2)
+        self.assertIn(data["trend"]["status"], ("improving", "stable", "increasing"))
+        self.assertIn("does not predict future risk", data["disclaimer"])
+
+    def test_assessment_list_requires_patient_or_scopes_access(self):
+        self.auth(self.worker)
+        r = self.client.get("/api/assessments/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNotNone(r.json()["data"])
 
     def test_no_model_means_503_not_fabricated(self):
         from mlcore.models import ModelVersion
 
         ModelVersion.objects.all().delete()
-        self.auth(self.patient_user)
-        r = self.client.post("/api/assessments/", VALID_PAYLOAD, content_type="application/json")
+        self.auth(self.worker)
+        r = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.profile.id},
+            content_type="application/json",
+        )
         self.assertEqual(r.status_code, 503)
         self.assertEqual(r.json()["error"]["code"], "MODEL_UNAVAILABLE")
-        self.assertFalse(Assessment.objects.exists())
+        self.assertFalse(Assessment.objects.filter(patient=self.profile).exists())

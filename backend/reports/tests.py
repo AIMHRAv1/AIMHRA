@@ -1,4 +1,4 @@
-"""Report generation tests."""
+"""Report generation tests for the healthcare-worker workflow."""
 from accounts.models import User
 from assessments.models import Assessment
 from audit.models import AuditLog
@@ -35,21 +35,26 @@ class ReportTests(TestCase):
                 status="PRODUCTION" if r is best else "CANDIDATE",
             )
 
-        cls.user = User.objects.create_user(
-            username="reppat", email="r@t.com", password="Str0ng!Pass1", role="PATIENT"
+        cls.worker = User.objects.create_user(
+            username="repworker", email="r@t.com", password="Str0ng!Pass1", role="HEALTHCARE_WORKER"
         )
-        cls.profile = PatientProfile.objects.create(user=cls.user)
+        cls.stranger = User.objects.create_user(
+            username="reps2", email="s2@t.com", password="Str0ng!Pass1", role="HEALTHCARE_WORKER"
+        )
+        cls.profile = PatientProfile.objects.create(
+            full_name="Report Patient", created_by=cls.worker
+        )
         cls.assessment = Assessment.objects.create(
             patient=cls.profile, visit_date="2026-08-01",
             symptoms=["severe_headache"], notes="", **PAYLOAD,
         )
 
-    def test_generate_report_produces_pdf(self):
+    def test_worker_can_generate_report_for_accessible_patient(self):
         from assessments.services import create_assessment
 
         result = create_assessment(self.profile, {**PAYLOAD, "visit_date": "2026-08-05", "symptoms": []})
         assessment = Assessment.objects.get(pk=result["assessment"]["id"])
-        report = generate_report(assessment, self.user)
+        report = generate_report(assessment, self.worker)
         self.assertTrue(report.file.name.endswith(".pdf"))
         report.file.open("rb")
         content = report.file.read()
@@ -58,14 +63,13 @@ class ReportTests(TestCase):
         self.assertTrue(content.startswith(b"%PDF"))
 
     def test_report_contains_prediction_and_model_version(self):
-        from mlcore.registry import predict
         from assessments.services import create_assessment
-        # Generate through the service so the prediction row exists.
+
         result = create_assessment(self.profile, {
             **PAYLOAD, "visit_date": "2026-08-02", "symptoms": [],
         })
         assessment = Assessment.objects.get(pk=result["assessment"]["id"])
-        report = generate_report(assessment, self.user)
+        generate_report(assessment, self.worker)
         self.assertEqual(Report.objects.count(), 1)
 
     def test_report_download_requires_access(self):
@@ -73,25 +77,33 @@ class ReportTests(TestCase):
 
         result = create_assessment(self.profile, {**PAYLOAD, "visit_date": "2026-08-03", "symptoms": []})
         assessment = Assessment.objects.get(pk=result["assessment"]["id"])
-        report = generate_report(assessment, self.user)
+        report = generate_report(assessment, self.worker)
 
-        token = RefreshToken.for_user(self.user).access_token
-        r = self.client.get(f"/api/reports/{report.id}/download/",
-                            HTTP_AUTHORIZATION=f"Bearer {token}")
+        token = RefreshToken.for_user(self.worker).access_token
+        r = self.client.get(
+            f"/api/reports/{report.id}/download/",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
         self.assertEqual(r.status_code, 200)
 
-        stranger = User.objects.create_user(username="stranger", email="s@t.com", password="Str0ng!Pass1")
-        stranger_token = RefreshToken.for_user(stranger).access_token
-        r = self.client.get(f"/api/reports/{report.id}/download/",
-                            HTTP_AUTHORIZATION=f"Bearer {stranger_token}")
+        stranger_token = RefreshToken.for_user(self.stranger).access_token
+        r = self.client.get(
+            f"/api/reports/{report.id}/download/",
+            HTTP_AUTHORIZATION=f"Bearer {stranger_token}",
+        )
         self.assertEqual(r.status_code, 403)
 
-    def test_report_generation_audited(self):
+    def test_report_generation_through_api_audited(self):
         from assessments.services import create_assessment
-        from reports.views import generate_report as _
 
         result = create_assessment(self.profile, {**PAYLOAD, "visit_date": "2026-08-04", "symptoms": []})
         assessment = Assessment.objects.get(pk=result["assessment"]["id"])
-        generate_report(assessment, self.user)
-        # create_assessment itself audits; direct service call doesn't need to
-        self.assertTrue(AuditLog.objects.filter(action="ASSESSMENT_CREATED").exists())
+        token = RefreshToken.for_user(self.worker).access_token
+        r = self.client.post(
+            "/api/reports/",
+            {"assessment": assessment.id},
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertTrue(AuditLog.objects.filter(action="REPORT_GENERATED").exists())

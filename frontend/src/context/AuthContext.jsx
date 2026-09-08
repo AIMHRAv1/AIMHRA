@@ -32,19 +32,13 @@ export function AuthProvider({ children }) {
     return u
   }, [])
 
-  const register = useCallback(async (payload) => {
-    const u = await authService.register(payload)
-    setUser(u)
-    return u
-  }, [])
-
   const logout = useCallback(async () => {
     await authService.logout()
     setUser(null)
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, setUser, booting, login, register, logout }}>
+    <AuthContext.Provider value={{ user, setUser, booting, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

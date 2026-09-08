@@ -1,54 +1,52 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
 import { assessmentService, reportService } from '../../services/auth'
+import { apiError } from '../../api/client'
 import { RiskTrendChart } from '../../charts'
-import { Disclaimer, EmptyState, ErrorState, Loading, RiskBadge } from '../../components/ui'
+import { Disclaimer, EmptyState, ErrorState, Loading, RiskBadge } from '../ui'
+import { downloadReport } from '../../utils/reportDownload'
 
-export default function History() {
+export default function HistoryPanel({ patientId }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [busyId, setBusyId] = useState(null)
   const [notice, setNotice] = useState(null)
 
-  useEffect(() => {
-    assessmentService.trend()
+  const load = useCallback(() => {
+    setError(null)
+    setData(null)
+    assessmentService.trend(patientId)
       .then(setData)
       .catch(setError)
-  }, [])
+  }, [patientId])
+
+  useEffect(() => { load() }, [load])
 
   async function generateReport(assessmentId) {
     setBusyId(assessmentId)
     setNotice(null)
     try {
-      await reportService.generate(assessmentId)
-      setNotice('Report generated — open the Reports page to download it.')
+      const d = await reportService.generate(assessmentId)
+      await downloadReport(d.report.id)
+      setNotice('Report generated and downloaded.')
     } catch (e) {
-      setNotice(e?.message || 'Report generation failed.')
+      setNotice(apiError(e).message || 'Report generation failed.')
     } finally {
       setBusyId(null)
     }
   }
 
-  if (error) return <div className="page"><ErrorState error={error} /></div>
-  if (!data) return <div className="page"><Loading /></div>
+  if (error) return <ErrorState error={error} onRetry={load} />
+  if (!data) return <Loading />
 
   const series = data.series ?? []
   const trend = data.trend
 
   return (
-    <div className="page">
-      <header className="page-head">
-        <div>
-          <h1>Risk history & trend</h1>
-          <p className="muted">{series.length} assessment{series.length === 1 ? '' : 's'} recorded</p>
-        </div>
-        <Link className="btn btn-primary" to="/app/assessment">＋ New assessment</Link>
-      </header>
-
+    <div className="stack">
       {notice && <div className="alert alert-info">{notice}</div>}
 
       {series.length === 0 ? (
-        <EmptyState title="No assessments yet" hint="Your history will appear here after your first assessment." />
+        <EmptyState title="No assessments yet" hint="Complete a New Assessment to start the patient's risk history." />
       ) : (
         <>
           <div className="card">
@@ -57,6 +55,7 @@ export default function History() {
             <p className="muted small">
               Sequence: {trend.sequence.join(' → ')} · status <b>{trend.status}</b>
             </p>
+            <p className="muted small">Trends describe stored assessments only — the system does not predict future risk.</p>
           </div>
 
           <div className="card">
@@ -78,7 +77,7 @@ export default function History() {
                     <td>
                       <button className="btn btn-small btn-secondary" disabled={busyId === s.id}
                               onClick={() => generateReport(s.id)}>
-                        {busyId === s.id ? '…' : 'PDF'}
+                        {busyId === s.id ? '…' : 'PDF ↓'}
                       </button>
                     </td>
                   </tr>

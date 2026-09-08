@@ -1,0 +1,1312 @@
+AIMHRA - Complete Technical Documentation, Code Walkthrough & Viva Preparation Guide
+=====================================================================================
+Derived ENTIRELY from the source code at d:\project\AIMHRA\AIMHRA\v1. Nothing below is
+taken from documentation alone; every claim is traceable to a file. Where something
+could not be found, it is explicitly marked "Not found in the inspected codebase."
+The repository was not modified.
+
+=====================================================================================
+1. Executive Summary
+=====================================================================================
+AIMHRA (AI-based Maternal Health Risk Analysis and Decision-Support System) is a
+full-stack clinical decision-support web application with:
+- A Django/DRF REST backend (backend/) serving JWT-authenticated APIs for 9 Django
+  apps: core, audit, accounts, patients, assessments, mlcore, kb, chat, reports.
+- A React 19 + Vite SPA (frontend/) with role-based routing for two staff roles:
+  HEALTHCARE_WORKER and ADMIN.
+- An ML layer that trains Random Forest and XGBoost on Mathernal_Risk.csv (6,103 raw
+  rows -> 6,057 after cleaning) over 8 features, serving the "production" model
+  through a thread-safe registry, with SHAP TreeExplainer explanations per prediction.
+- A deterministic, versioned rule engine (assessments/rules/rules.json, v1, 21 rules,
+  4 categories) that outranks everything (ML, RAG, LLM) for emergencies.
+- A RAG knowledge base (kb app): ingestion, chunking, TF-IDF/OpenAI embeddings,
+  cosine retrieval over DocumentChunk vectors (or optional Qdrant).
+- An LLM chat assistant (chat app) with a non-diagnosis system prompt, emergency
+  keyword bypass, and graceful fallbacks.
+- PDF report generation with ReportLab (reports app).
+- Audit logging (audit app) for 19 action types with key redaction.
+
+The working tree documents an in-progress role refactor: PATIENT was removed as an
+application role (pages/patient/* and Register.jsx deleted; new 0002 migrations in
+accounts, patients, audit). Patients are now standalone clinical records, not users.
+
+=====================================================================================
+2. What AIMHRA Does
+=====================================================================================
+Purpose: A healthcare worker logs in, maintains maternal patient records, enters
+clinical measurements at each visit, and the system:
+1. Runs an ML model classifying the patient "low risk" / "mid risk" / "high risk".
+2. Explains the prediction with SHAP (per-feature contributions).
+3. Runs independent clinical safety rules (e.g., systolic BP >= 160 -> EMERGENCY)
+   and creates alerts.
+4. Stores everything to show a longitudinal history and trend (improving/stable/increasing).
+5. Can generate a PDF report for any assessment.
+6. Provides a RAG-grounded AI assistant per patient that escalates emergency language
+   deterministically.
+
+Intended users (accounts/models.py): HEALTHCARE_WORKER and ADMIN only. Patients are
+NOT users (patients/models.py docstring).
+
+End-to-end flow (verified in code):
+User Login -> POST /api/auth/login/ -> JWT -> Role Dashboard -> Patient list -> Patient
+Detail workspace -> New Assessment -> client validation -> POST /api/assessments/ ->
+AssessmentSerializer validation -> create_assessment() -> registry.predict -> SHAP ->
+rules.evaluate -> transaction.atomic (Assessment+Prediction+Alert) -> audit -> trend ->
+JSON response -> UI -> History/Trend -> PDF report -> AI assistant.
+
+=====================================================================================
+3. Complete Technology Stack
+=====================================================================================
+Backend (requirements.txt): Django >=5.1,<5.2; djangorestframework; simplejwt;
+django-cors-headers; drf-spectacular; python-dotenv; numpy; pandas; scikit-learn;
+xgboost; shap; joblib; reportlab; openai; requests(UNUSED).
+- Django: ORM, auth, admin, migrations, routing.
+- DRF: serializers, views, permissions, pagination, exception hooks.
+- SimpleJWT + token_blacklist: stateless JWT auth + refresh blacklisting.
+- cors-headers: allows Vite origin (5173) to call the API.
+- drf-spectacular: OpenAPI schema + Swagger UI.
+- python-dotenv: loads .env in settings.
+- numpy/pandas: ML + CSV pipeline. scikit-learn: RF, splits, metrics, TF-IDF.
+- xgboost: gradient-boosted trees. shap: TreeExplainer.
+- joblib: model bundle persistence. reportlab: PDF. openai: LLM/embeddings client.
+
+Installed but missing from requirements.txt (by import tracing): pypdf (PDF ingestion),
+dj_database_url (postgres only), qdrant_client (optional; ImportError caught).
+
+Frontend (package.json): axios, react 19, react-dom 19, react-router-dom 7, recharts 2.
+Dev: vite 8, @vitejs/plugin-react, oxlint, @types/react, @types/react-dom.
+NOT used: Redux, Zustand, Tailwind, component libs, Lucide, LangChain/LangGraph,
+Gemini/Groq. Icons are Unicode; styling is hand-written CSS.
+
+AI/RAG stack: LLM = any OpenAI-compatible Chat Completions (default gpt-4o-mini at
+api.openai.com); embeddings = local TF-IDF (default) or OpenAI text-embedding-3-small;
+vector store = local numpy/SQLite cosine (default) or optional Qdrant collection aimhra_kb;
+RAG retrieval in kb/services/rag.py (top-5, min score 0.05).
+=====================================================================================
+4. Overall System Architecture
+=====================================================================================
+React SPA (Vite, 5173)
+  | axios (src/api/client.js) - JWT in Authorization header
+  | dev proxy: /api -> http://localhost:8000 (vite.config.js)
+  v
+Django (config/urls.py) -> DRF layer
+  | JWTAuthentication (default auth class)
+  | IsAuthenticated default permission
+  | core.permissions.IsHealthcareWorker / IsAdmin / IsAdminOrReadOnly
+  | core.pagination.StandardPagination (20/page)
+  | core.exceptions.structured_exception_handler -> {success, error{code,message,details}}
+  v
+Views -> Serializers (validation) -> services/selectors (business logic) -> ORM -> SQLite
+  v
+Domain engines:
+  +-- mlcore.registry -> joblib bundle -> RF/XGB predict_proba -> SHAP
+  +-- assessments.rules -> rules.json (deterministic, outranks everything)
+  +-- kb.services (RAG retrieval) -> chat.llm (OpenAI-compatible generation)
+  +-- reports.services -> ReportLab -> media/reports/*.pdf
+
+Layer responsibilities:
+- Serializer: input shape + range validation (same PLAUSIBILITY_RANGES as data cleaning).
+- View: HTTP orchestration + access control (can_access_patient) + response envelope.
+- Service: transactional workflows (create_assessment, generate_report, respond,
+  index_document) - no HTTP knowledge.
+- Selectors: reusable query/scope logic (patients/selectors.py).
+- Registry: the only place that touches model artifacts.
+- Frontend never calls axios directly from components; goes through api/client.js and
+  services/auth.js.
+
+=====================================================================================
+5. Complete Project Folder Structure (actual)
+=====================================================================================
+v1/
++-- README.md                      (nearly empty: "# AIMHRA")
++-- .gitignore
++-- Mathernal_Risk.csv             (duplicate of dataset at root)
++-- pv1.zip                        (unexplained archive; not referenced)
++-- scripts/dataset_profile.py     (stdlib CSV profiler)
++-- backend/
+|   +-- manage.py                  (DJANGO_SETTINGS_MODULE=config.settings)
+|   +-- requirements.txt, .env.example (WARNING: exposed API key - Section 28/36)
+|   +-- db.sqlite3, admin.txt(empty), full_test_out.txt, visualization.ipynb
+|   +-- config/                    (settings, urls, wsgi, asgi)
+|   +-- core/                      (permissions, exceptions, middleware, pagination, responses)
+|   +-- audit/                     (AuditLog, log_event, admin-only list API)
+|   +-- accounts/                  (User+role, JWT login/refresh/logout, user mgmt)
+|   |   +-- migrations/0001, 0002 (PATIENT role removal)
+|   +-- patients/                  (PatientProfile, PatientAssignment, selectors, stats)
+|   |   +-- migrations/0001, 0002 (standalone records refactor)
+|   +-- assessments/               (Assessment, Prediction, Alert; services, trends, urls)
+|   |   +-- rules/                 (engine.py, keywords.py, rules.json, __init__.py)
+|   +-- mlcore/                    (ML: constants, dataset, preprocessing, training,
+|   |   |                           evaluation, registry, explain, ModelVersion, views, tests)
+|   |   +-- management/commands/   (train_models, inspect_dataset, generate_synthetic)
+|   +-- kb/                        (RAG: KnowledgeDocument, DocumentChunk, upload/reindex/retrieve)
+|   |   +-- services/              (ingestion, indexing, embeddings, store, rag)
+|   +-- chat/                      (ChatSession, ChatMessage, services, llm.py)
+|   +-- reports/                   (Report model, ReportLab services, list/generate/download)
+|   +-- data/                      (Mathernal_Risk.csv, dataset_report.json)
+|   +-- ml_artifacts/              (joblib bundles)
+|   +-- media/                     (kb/documents/, reports/*.pdf)
+|   +-- logs/                      (aimhra.log)
+|   +-- scripts/smoke_test.py      (E2E workflow smoke test)
++-- frontend/
+    +-- index.html, package.json, vite.config.js, .env.example, .oxlintrc.json
+    +-- public/ (favicon.svg, icons.svg)
+    +-- src/ main.jsx, App.jsx, styles.css
+        +-- api/client.js          (axios, JWT interceptors, envelope unwrap)
+        +-- context/AuthContext.jsx
+        +-- components/            (Layout, ProtectedRoute, ui, patient/ (7 panels))
+        +-- charts/index.jsx       (Recharts wrappers)
+        +-- constants/clinical.js  (blood-group options)
+        +-- pages/auth/Login.jsx
+        +-- pages/hcw/             (Dashboard, Patients, PatientNew, PatientDetail, Alerts, Reports)
+        +-- pages/admin/           (Dashboard, Users, Models, Knowledge, Audit)
+        +-- services/auth.js       (ALL endpoint wrappers)
+        +-- utils/reportDownload.js
+
+Deleted in working tree (role refactor): pages/auth/Register.jsx and pages/patient/*.
+=====================================================================================
+6. Backend Architecture
+=====================================================================================
+config/settings.py:
+- Loads .env via dotenv; SECRET_KEY/DEBUG/ALLOWED_HOSTS from env with dev defaults.
+- INSTALLED_APPS: contribs + rest_framework, simplejwt(+token_blacklist), corsheaders,
+  drf_spectacular + core, audit, accounts, patients, assessments, mlcore, kb, chat, reports.
+- MIDDLEWARE: CorsMiddleware first, standard stack + core.middleware.StructuredErrorMiddleware.
+- AUTH_USER_MODEL = "accounts.User".
+- REST_FRAMEWORK: JWTAuthentication default, IsAuthenticated default, StandardPagination,
+  custom exception handler, spectacular schema.
+- Database: SQLite default; manual DATABASE_URL parsing (~Postgres via dj_database_url,
+  MySQL via urlparse).
+- SIMPLE_JWT: access 30 min, refresh 7 days (env), custom obtain/refresh serializers.
+- CORS_ALLOWED_ORIGINS from env (5173 dev origins).
+- ML config: DATASET_PATH, ML_ARTIFACTS_DIR, MODEL_SELECTION_CRITERION.
+- LLM/RAG config: LLM_API_KEY/BASE_URL/MODEL/TIMEOUT, EMBEDDING_BACKEND, VECTOR_BACKEND,
+  VECTOR_DB_URL/API_KEY.
+- Logging: rotating file logs/aimhra.log; avoids sensitive medical payloads.
+
+config/urls.py: admin/, api/schema/, api/docs/, then api/auth, api/patients,
+api/assessments, api/models, api/rag, api/chat, api/reports, api/audit, api/admin (stats).
+Media served in DEBUG.
+
+core/: shared infrastructure.
+- permissions.py: IsHealthcareWorker (role in HCW+ADMIN), IsAdmin, IsAdminOrReadOnly.
+- exceptions.py: ApiError, ERROR_CODE_BY_STATUS, flatten_error_messages,
+  structured_exception_handler (rollback, no stack leaks, 500 logged).
+- middleware.py: StructuredErrorMiddleware converts HTML 404/500 on /api/* to JSON.
+- pagination.py: StandardPagination -> {success,data:{count,page,pages,results}}.
+- responses.py: ok(data) success-envelope helper.
+
+Uniform response contract: every endpoint returns
+{"success":true,"data":...} or {"success":false,"error":{code,message,details}}.
+Frontend (unwrap/apiError) is built around this.
+
+=====================================================================================
+7. Frontend Architecture
+=====================================================================================
+- main.jsx: createRoot -> StrictMode -> BrowserRouter -> AuthProvider -> App.
+- State: useState/useCallback/useEffect + one Context (AuthContext) for the user;
+  localStorage keys aimhra_access / aimhra_refresh. No Redux/Zustand.
+- api/client.js: request interceptor attaches Bearer token; response interceptor on 401
+  refreshes once (single-flight) and retries, else clears tokens and dispatches
+  "aimhra:logout" window event; unwrap() strips {success,data}; apiError() normalizes.
+  api.get/post/patch/put/delete + getRaw (blob). Components never import axios directly.
+- App.jsx: /login public; / -> /app/dashboard; /app wraps ProtectedRoute+Layout with
+  nested routes + role arrays; RoleDashboard switches HCW/Admin dashboard; * redirect.
+- Rendering: route guard (booting -> Loading; not logged in -> /login; role not in list
+  -> /login; wrong role -> own dashboard) -> page -> services -> Loading/ErrorState/
+  EmptyState/content.
+=====================================================================================
+8. Database Architecture
+=====================================================================================
+Models (all fields verified):
+- accounts.User (AbstractUser) + role (HCW/ADMIN, default HCW), phone, full_name.
+  save() derives is_staff = (role==ADMIN). Property is_admin_role.
+- patients.PatientProfile: created_by FK(SET_NULL), is_active (archive), archived_at,
+  demographics (full_name, email, phone, address), clinical (date_of_birth, blood_group,
+  gestational_week_at_registration, estimated_due_date, gravidity, parity,
+  medical_history_notes, allergies, emergency_contact name/phone, obstetric_history_notes,
+  current_medications, additional_notes), patient_code (unique P-XXXXXXXX via
+  generate_patient_code), timestamps. Indexes (patient_code),(created_by). Demographics
+  NEVER fed to the ML model (docstring).
+- patients.PatientAssignment: healthcare_worker FK(role HCW), patient FK, assigned_by FK
+  (role ADMIN), created_at; unique_together(worker,patient).
+- assessments.Assessment: patient FK, created_by FK, visit_date, gestational_week,
+  8 FloatFields (age, body_temperature, heart_rate, systolic_bp, diastolic_bp, bmi,
+  hba1c, fasting_glucose), symptoms JSON (fixed vocab), notes, created_at.
+  index (patient,visit_date). feature_values() helper.
+- assessments.Prediction: assessment OneToOne, risk_level (3 levels), probability,
+  probabilities JSON, explanation JSON (SHAP), model_name/version, model_ref FK->ModelVersion.
+- assessments.Alert: assessment FK, patient FK, category, rule_id, rule_description,
+  message, rules_version (default v1), status (OPEN/ACKNOWLEDGED/RESOLVED),
+  acknowledged_by FK. Indexes (patient,status),(category).
+- mlcore.ModelVersion: name, version (unique together), trained_at, dataset_version(md5),
+  features, training_config, metrics, validation_metrics, artifact_path,
+  selection_criterion, status (CANDIDATE/PRODUCTION/RETIRED). Index (status).
+- kb.KnowledgeDocument: title, source_url, file, content_text, sha256, chunk_count,
+  indexed_at, uploaded_by. kb.DocumentChunk: document FK, chunk_index, section, text,
+  embedding JSON, embedding_backend.
+- chat.ChatSession: title, patient FK, created_by; chat.ChatMessage: session FK, role,
+  content, escalation JSON, sources JSON, generation_mode.
+- reports.Report: patient FK, assessment FK, generated_by, file FileField, created_at.
+- audit.AuditLog: user FK, action (19 choices), target_type, target_id, detail JSON
+  (never stores medical values/chat content), ip_address, created_at.
+
+Relationships (actual):
+accounts.User -> created_by/acknowledged_by/assigned_by/generated_by/uploaded_by etc.
+PatientProfile <- PatientAssignment (worker-patient, unique); 1:N Assessment <- 1:1
+Prediction -> FK ModelVersion; 1:N Alert; 1:N Report; 1:N ChatSession <- 1:N ChatMessage;
+KnowledgeDocument 1:N DocumentChunk (no patient link); AuditLog polymorphic-by-string.
+
+Why: one immutable Assessment per visit; Prediction separate + pinned to model_ref for
+reproducibility; Alert rows have their own lifecycle; reports stored as files so downloads
+are auth-checked; audit uses string targets to avoid FK coupling.
+
+=====================================================================================
+9. Authentication and Authorization
+=====================================================================================
+Login flow (traceable):
+1. Login.jsx -> authService.login -> POST /api/auth/login/ {username,password}.
+2. LoginView (TokenObtainPairView) -> CustomTokenObtainPairSerializer.validate:
+   - calls SimpleJWT to authenticate,
+   - REJECTS any role outside {HCW, ADMIN} (legacy PATIENT) with AuthenticationFailed +
+     LOGIN_FAILED audit (reason role_not_allowed),
+   - any failure logs LOGIN_FAILED and re-raises,
+   - on success logs LOGIN and embeds UserSerializer as data["user"].
+3. Response {access, refresh, user}; frontend stores tokens in localStorage, sets user,
+   navigates to /app/dashboard or location.state.from.
+4. Every request carries Authorization: Bearer <access> (axios interceptor).
+5. On 401: refresh once via /api/auth/refresh/ (CustomTokenRefreshSerializer re-checks
+   role + is_active from DB before minting new access - closes legacy refresh loophole).
+6. Logout: /api/auth/logout/ -> RefreshToken(refresh).blacklist(); frontend clears tokens.
+7. Session restore: AuthContext calls GET /api/auth/profile/ if token exists; 401 clears.
+
+Tokens/permissions: default IsAuthenticated; views layer IsHealthcareWorker / IsAdmin /
+object checks. Object-level access centralized in patients/selectors.py:
+- patient_ids_for_healthcare_worker = created UNION assigned.
+- can_access_patient(user, profile): ADMIN all; HCW creator-or-assigned; else False.
+- scoped_patient_queryset: queryset-level enforcement.
+This helper is reused by assessments, alerts, reports, chat. ProtectedRoute.jsx is UX-only;
+backend is authority (tests prove 403 + no data leak).
+
+Role matrix (verified):
+- Login both. Patients: worker own+assigned, admin all. Assessments/alerts/reports/chat for
+  accessible patients both. Alert ack both (IsHealthcareWorker). KB upload/delete/reindex:
+  admin only (403 worker). Model activate: admin. Audit list: admin. User mgmt: admin.
+  System stats: admin.
+
+Patient-role removal (already implemented):
+- accounts/0002: role choices -> HCW/ADMIN + data migration deactivate_legacy_patient_accounts
+  (is_active=False on PATIENT rows, never deleted).
+- patients/0002: copies user's name/email/phone onto PatientProfile then REMOVES the user
+  OneToOne FK; adds created_by etc.
+- Login+refresh guards; tests cover legacy login/refresh/access rejection; protected route
+  hard-codes two roles; smoke test asserts /api/auth/register/ -> 404.
+=====================================================================================
+10. Patient Management
+=====================================================================================
+Lifecycle -> implementation map:
+- Create: pages/hcw/PatientNew.jsx (17-field form, client-required full_name, null/number
+  coercion, maps error.details to field errors) -> POST /api/patients/ ->
+  PatientListView.create -> serializer (blood-group normalization, gravidity <=30,
+  gestational week 1-45) -> save(created_by=request.user) -> audit PATIENT_CREATED.
+- List/search: pages/hcw/Patients.jsx (client search + risk-first sort) ->
+  GET /api/patients/?search= -> scoped_patient_queryset + Q filter on code/name/phone/email;
+  patient_summaries batch-aggregates current risk/confidence/trend/counts/open alerts.
+- Detail/update: PatientDetail.jsx + components/patient/ProfilePanel.jsx ->
+  GET/PATCH /api/patients/<id>/ -> PatientDetailView (can_access_patient else 403;
+  summary attached) -> audit PATIENT_UPDATED.
+- Assignment: pages/admin/Users.jsx -> POST /api/patients/assignments/, GET, DELETE
+  .../<id>/ -> Admin-only -> audit PATIENT_ASSIGNED.
+- Stats: pages/admin/Dashboard.jsx -> GET /api/admin/stats/ -> SystemStatsView.
+
+=====================================================================================
+11. Maternal Risk Assessment
+=====================================================================================
+The 8 model features (exactly mlcore/constants.FEATURES, order matters):
+age (UI 14-55) | body_temperature (deg F, 95-106) | heart_rate bpm (40-200) |
+systolic_bp mmHg (70-250, must >= diastolic) | diastolic_bp mmHg (40-150) |
+bmi (12-60) | hba1c "HbA1c column (dataset units)" observed 30-50 (20-60) |
+fasting_glucose "fasting column" observed 3.5-8.9 (2-20).
+
+constants.py documents the glucose unit inconsistency and records it rather than
+silently "fixing" it.
+
+Also collected but NOT model inputs: visit_date (not future), gestational_week (1-45,
+optional), symptoms (12-token vocabulary from rules.json), notes. Patient demographics
+(name, DOB, blood group...) are recordkeeping only.
+
+Serialization path: AssessmentSerializer (ModelSerializer) - read_only id/patient/
+created_at/prediction; get_prediction embeds linked prediction; validators:
+validate_visit_date (no future), validate_gestational_week, validate_symptoms
+(tokens must be in rules.json vocabulary), cross-field validate() applies the
+SAME PLAUSIBILITY_RANGES used to clean training data + diastolic <= systolic.
+
+=====================================================================================
+12. Machine Learning Pipeline
+=====================================================================================
+Files: constants -> dataset -> preprocessing -> training -> evaluation -> registry ->
+explain; commands train_models/inspect_dataset; models.py (ModelVersion).
+
+Dataset (backend/data/Mathernal_Risk.csv; duplicate at root; md5 6ad779f6...70dab)
+= 6,103 rows x 11 cols, no missing values. Target Status -> risk_level:
+low 2001 / mid 2043 / high 2059 (near-balanced 33/33/33 so resampling rejected).
+COLUMN_MAP maps headers to canonical names. Excluded: Patient ID, Name (identifier + PII);
+LEAKAGE_FEATURES = [] with a documented review (all features are point-of-assessment).
+
+Cleaning (clean_dataset): drop exact duplicates on features+label (1 row) + implausible
+rows outside PLAUSIBILITY_RANGES (45 rows) -> 6,057 rows. Every drop counted; persisted by
+inspect_dataset into backend/data/dataset_report.json.
+
+Split & preprocessing: stratified 70/15/15, random_state=42. Preprocessor =
+median imputation only, fitted on training split, serialized into the joblib bundle as a
+dict (to_dict/from_dict). No scaling (trees need none).
+
+Models (training.py):
+RF: n_estimators=400, min_samples_leaf=2, class_weight="balanced_subsample", random_state=42.
+XGB: n_estimators=400, learning_rate=0.08, max_depth=6, subsample=0.9,
+colsample_bytree=0.8, tree_method="hist", eval_metric="mlogloss", random_state=42.
+Labels encoded to indices of RISK_LEVELS (probability columns align for both models).
+quick=True trains 10-tree models for tests only (never production).
+Bundle per model: {model_name, model, preprocessor, features, classes, dataset_md5,
+trained_at, train_config} -> ml_artifacts/{randomforest,xgboost}_{full,quick}.joblib.
+
+Evaluation (evaluation.py): accuracy, macro precision/recall/F1, high_risk_recall
+("a missed high-risk case is the costliest error"), per-class metrics, confusion matrix,
+ROC-AUC OVR macro. selection_score: default high_risk_recall_then_f1 (tuple high-risk
+recall, macro F1, AUC); macro_f1 / accuracy alternatives. "Accuracy is never the sole basis."
+
+Registration (train_models command): winner by criterion; version v1.<YYYYMMDDHHMM>;
+retires other rows; single global production model; transaction.atomic; logs MODEL_TRAINED.
+
+Serving (registry.py):
+- get_production_bundle(): thread-safe (Lock) cached load; finds ModelVersion
+  status=PRODUCTION newest; resolves path relative to BASE_DIR; raises ModelUnavailableError
+  (503 MODEL_UNAVAILABLE) if none/missing/corrupt - "a prediction is never fabricated".
+- predict(features_dict): validate all 8 present -> (1,8) array in FEATURES order ->
+  Preprocessor.from_dict transform -> predict_proba -> argmax -> label; stashes
+  _predicted_index/_predicted_label on bundle for SHAP; returns {risk_level,
+  probabilities{cls:4dp}, probability, model{name,version,id}, explanation}.
+- feature_importance(bundle): global feature_importances_ sorted desc.
+=====================================================================================
+13. Preprocessing
+=====================================================================================
+Only learned transform = median imputation (mlcore/preprocessing.py). Training: fit on
+X_train -> np.nanmedian per column (NaN median -> 0) -> transform train/val/test.
+Inference: medians ride inside the joblib bundle; predict() rebuilds via from_dict.
+Training and inference share the same numbers by construction (parity, no train/serve skew).
+Encoding: none (features numeric); label encoding = fixed RISK_LEVEL_ORDER index map.
+Scaling: none (trees). Range checking: twice - data-cleaning drop + API serializer
+validation, same constants file.
+
+=====================================================================================
+14. Risk Classification
+=====================================================================================
+Comes from the MODEL's argmax over 3 class probabilities:
+  proba = model.predict_proba(X)[0]; predicted = classes[argmax(proba)].
+risk_level = argmax class name; probability = its prob; probabilities = full dict.
+No thresholds, no label-encoder file, no UI-only labels.
+Rule engine runs in PARALLEL and does NOT override the ML class - it produces a separate
+rules.category and (when != NORMAL) an Alert. Rules only "outrank" ML in the CHAT/UX
+escalation path (LLM bypassed on emergency).
+Three levels = dataset canonical labels (constants: "Do not invent others"); mirrored in
+Prediction.risk_level choices, UI badges, chart colors.
+
+=====================================================================================
+15. SHAP Explainability
+=====================================================================================
+- What/why: SHAP attributes each feature's contribution to a prediction; here it lets a
+  worker see why the model said "high risk". explain.py wording rule: SHAP values describe
+  contributions to the MODEL'S PREDICTION, never medical causation about the patient.
+- Where: mlcore/explain.py explain_prediction(bundle, vector), called from
+  registry.predict() after probability computation, on the same preprocessed vector.
+- How: shap.TreeExplainer(model).shap_values(vector); compatibility ladder for
+  sklearn/xgboost output shapes (3-D -> slice predicted class; 2-D; legacy list).
+  Takes top 8 by absolute impact; each item {feature, label (FEATURE_LABELS), value,
+  impact (4dp), direction increasing/decreasing/neutral}. Response includes method
+  "SHAP (TreeExplainer)", target_class, and anti-causation disclaimer.
+- Failure: wrapped in try/except - "Explainability must never take the prediction endpoint
+  down" - falls back to {method:"unavailable", features:[]}; prediction still returned.
+- Persistence: stored on Prediction.explanation JSON; re-shown without recomputation.
+- Frontend: charts/index.jsx ShapBars - horizontal Recharts bars, red (#c0392b) = positive
+  impact (pushed risk up), green (#2e7d5b) = negative, zero reference line; rendered in
+  PredictionResult and Overview tab, always with Disclaimer.
+- Positive/negative meaning: positive = increased predicted-class probability (red),
+  negative = decreased it (green). Statistical contributions, not causes.
+
+=====================================================================================
+16. Rule-Based Safety Engine
+=====================================================================================
+Files: assessments/rules/rules.json (data), engine.py (evaluator), keywords.py (chat
+text -> symptom tokens), __init__.py (exports evaluate, load_rules).
+Categories (ranked CATEGORY_RANK): NORMAL(0) ATTENTION(1) HIGH_CONCERN(2) EMERGENCY(3).
+
+The 21 rules (v1), verbatim thresholds:
+- EMERGENCY: EMER-CONVULSIONS, EMER-BLEEDING, EMER-BREATHING (symptom); EMER-BP-HIGH
+  sys>=160; EMER-BP-DIA dia>=110; EMER-TEMP temp>=104F; EMER-HR-HIGH HR>=140.
+- HIGH_CONCERN: symptoms severe_headache, blurred_vision, severe_abdominal_pain,
+  decreased_fetal_movement, swelling_face_hands; HC-BP-SYS>=140, HC-BP-DIA>=90,
+  HC-HR-HIGH>=120, HC-FEVER>=100.4F.
+- ATTENTION: symptoms persistent_vomiting, dizziness_fainting, fever; ATT-HR-LOW HR<55;
+  ATT-BMI-LOW BMI<18.5; ATT-BMI-HIGH BMI>=30.
+rules.json governance note: thresholds are configurable defaults aligned with clinical
+guidance ranges and "MUST be reviewed and approved by qualified clinical stakeholders."
+
+Mechanics (engine.py):
+- load_rules() caches JSON keyed by file mtime (hot-reload).
+- _matches: symptom = token membership; vital = operator table {>=,>,<=,<,==}.
+- evaluate(vitals, symptoms): collect all triggered; worst = highest-rank category;
+  escalate = worst in (EMERGENCY, HIGH_CONCERN); returns category, escalate, rules_version,
+  human message, ordered trigger list {id, category, description}.
+Design: explicit (every rule a JSON row), versioned (stamped on every outcome), testable
+(pure function), explainable (ids + descriptions).
+
+Precedence with ML: assessments -> ML and rules are independent outputs (both persisted;
+Alert when != NORMAL). Chat -> rules checked FIRST; if escalate, LLM bypassed entirely
+(generation_mode=escalation) + RULE_ESCALATION audit. Engine docstring: "Emergency rules
+outrank the ML model, RAG and the LLM. Nothing downstream may soften or hide an emergency."
+
+Why separate from ML: statistical models can miss deterministic danger thresholds; a rule
+set is inspectable, auditable, versioned, guaranteed to fire.
+=====================================================================================
+17. Alerts
+=====================================================================================
+Creation (assessments path, create_assessment): after prediction, rules_evaluate(feature_values,
+symptoms) runs; if category != "NORMAL", ONE Alert row created with rule_id (up to 5 ids,
+comma-joined), rule_description, message, rules_version - inside the same transaction.atomic()
+as assessment+prediction (all-or-nothing).
+
+Lifecycle: OPEN -> ACKNOWLEDGED -> RESOLVED via POST /api/assessments/alerts/<pk>/ack/
+(AlertAckView, IsHealthcareWorker, AlertAckSerializer restricts to those two statuses;
+records acknowledged_by; access-checked).
+
+Retrieval: GET /api/assessments/alerts/?patient=&status=&category= (AlertListView);
+HCW scoped to patients; ADMIN all.
+
+Display:
+- pages/hcw/Alerts.jsx: global open-alerts table (status:OPEN), category filter, severity
+  sort (rank map), Ack/Resolve.
+- components/patient/AlertsPanel.jsx: per-patient, all statuses, optimistic status update.
+- Dashboard cards count open/emergency; PatientDetail Overview shows emergency banner +
+  "Active alerts" strip.
+- Styling maps category -> risk-low/mid/high/emergency classes; color always paired with
+  icon + text (accessibility rule in ui.jsx and styles.css).
+
+=====================================================================================
+18. Risk History
+=====================================================================================
+Storage: every Assessment (raw inputs) + Prediction (output) with timestamps + model
+identity -> history is natural.
+Retrieval: GET /api/assessments/risk-history/?patient=<id> -> RiskHistoryView ->
+services.prediction_series(patient): predictions joined to assessments ordered by
+visit_date,id (oldest first); each {id, risk_level, probability, model, visit_date,
+gestational_week} + disclaimer.
+UI: HistoryPanel shows the sequence line ("low risk -> mid risk ..."), RiskTrendChart
+step line, full table (visit date, gestational week, risk badge, confidence %, model,
+per-row "PDF" button).
+patient_summaries (patients/selectors.py) computes assessment_count, last_assessment_date,
+latest stored prediction for the list views.
+
+=====================================================================================
+19. Risk Trend
+=====================================================================================
+Algorithm (assessments/trends.compute_trend, input = oldest-first series):
+1. Empty -> {status:"no_data", direction:"unknown"}.
+2. current = last risk_level; previous = second-to-last if >=2.
+3. One visit -> status:"baseline".
+4. Else diff = RISK_LEVEL_ORDER[current] - RISK_LEVEL_ORDER[previous] (low=0,mid=1,high=2):
+   - increasing (diff>0) -> status "increasing"; decreasing (diff<0) -> "improving";
+     stable (diff==0) -> "stable". "improving means a move to a lower-risk class."
+5. Returns also sequence (all levels) and visits count.
+
+Historical trend != future prediction - enforced:
+- trends.py docstring: "descriptive analytics over stored predictions... does NOT predict
+  future risk (no temporal model is trained; the dataset has no visit-level fields)."
+- RiskTrendView response ships "Trends describe stored assessments only. The system does
+  not predict future risk."; tests assert it.
+- UI repeats it under every chart; PDF too.
+- Only temporal ML code is quarantined research module mlcore/synthetic.py (Cholesky,
+  flagged is_synthetic, quality-gated, never in production training).
+=====================================================================================
+20. PDF Reports
+=====================================================================================
+Flow: Assessment -> POST /api/reports/ {"assessment": id} (ReportListCreateView.post) ->
+access check (can_access_patient), requires existing prediction ->
+reports/services.generate_report(assessment, generated_by):
+- collects prediction, patient, full prediction_series + compute_trend;
+- builds A4 ReportLab doc (BytesIO): title + timestamp, color-coded risk category, model
+  confidence %, per-class probabilities, model name/version, patient_code (not name),
+  assessment date, gestational week, 8-row measurements table, risk trend line + direction
+  with "does not predict future risk" note, top-6 SHAP bullets + disclaimer, rule alerts
+  (or "No warning rules triggered"), full DISCLAIMER;
+- Report.file.save -> media/reports/report_<code>_<id>_<timestamp>.pdf.
+Response: {report, download_url}. Download: GET /api/reports/<pk>/download/ ->
+ReportDownloadView -> can_access_patient -> FileResponse(as_attachment=True).
+
+Why backend PDF: single source of truth (prediction, SHAP, trend, alerts all server-side),
+consistent format, auth-checked download. Frontend just streams the blob
+(utils/reportDownload.js: getRaw -> Blob -> object URL -> anchor click -> revoke).
+NOTE: pages/hcw/Reports.jsx also renders a direct /media/ link that bypasses the
+auth-checked endpoint (see Section 38). It depends on DEBUG media serving.
+
+=====================================================================================
+21. AI Assistant
+=====================================================================================
+Pipeline (chat/services.respond):
+1. User ChatMessage persisted immediately.
+2. detect_symptoms(text) (rules/keywords.py): lexical phrase matching - e.g.,
+   "convulsion/seizure/fit/eclampsia" -> convulsions; "baby not moving" ->
+   decreased_fetal_movement. No LLM.
+3. Rules FIRST: if symptoms detected, latest assessment's vitals loaded and
+   rules_evaluate(vitals, detected) runs. Design comment: only high-concern/emergency
+   WORDS IN THE MESSAGE ITSELF escalate - stored vitals alone never hijack a chat about
+   nutrition (vitals only injected when symptoms detected).
+4. Escalation branch: deterministic answer from rules_out message + triggered ids + "This
+   chat assistant cannot provide emergency care."; saved with generation_mode="escalation";
+   audited RULE_ESCALATION; returned without RAG or LLM.
+5. Normal branch: _patient_context() = latest prediction only -> one line ("latest assessed
+   risk category... model confidence ...%") + gestational week. Minimal, authorized, no
+   sensitive history.
+6. rag.retrieve_context(question) -> top chunks.
+7. History: last 12 messages (final user turn dropped, passed as question explicitly).
+8. llm.generate_answer(question, context_chunks, history, patient_context) -> (answer, mode).
+9. Fallbacks: LLM unconfigured/fails/empty -> if chunks: FALLBACK_NO_LLM + verbatim excerpts
+   ([title - chunk n]) mode="rag_only_fallback"; else FALLBACK_NO_LLM + "No indexed knowledge
+   matched..." mode="no_llm_configured".
+10. Assistant message persisted with sources (title, url, chunk_index, score), escalation
+    summary, generation_mode; audited CHAT_ACCESS; serialized with CHAT_DISCLAIMER.
+
+Storage: ChatSession per patient (title auto-set from first message first 60 chars);
+ChatMessage per turn.
+
+LLM call (chat/llm.py): OpenAI-compatible client (api_key, base_url, timeout 45s),
+model settings.LLM_MODEL (default gpt-4o-mini), temperature=0.3, max_tokens=600.
+System prompt forbids diagnosing/prescribing/certainty/exam claims; demands grounding in
+excerpts; cautious language; <250 words. generate_answer raises nothing - any exception
+logged, fallback returned.
+
+The assistant does NOT diagnose - prompt, disclaimers, and chat UI all enforce it.
+=====================================================================================
+22. RAG / Knowledge Base
+=====================================================================================
+- Ingestion: kb/views.py KnowledgeDocumentListCreateView.perform_create - admin uploads
+  PDF/TXT/MD or pastes text; sha256 stored; indexing ValueError -> document deleted + 400.
+- Extraction: kb/services/ingestion.extract_text - .pdf via pypdf (PdfReader page join),
+  .txt/.md read UTF-8, else content_text.
+- Chunking: ingestion.chunk_text - 900-char chunks, 150-char overlap (CHUNK_SIZE,
+  CHUNK_OVERLAP); empty text -> [].
+- Embedding: embeddings.py - local TF-IDF (TfidfVectorizer max_features=5000,
+  stop_words=english) fitted over whole corpus at index time (fit_corpus from indexing;
+  other docs re-embedded via _reembed_others); openai text-embedding-3-small.
+- Indexing: indexing.index_document - @transaction.atomic; deletes old chunks, embeds,
+  bulk_create DocumentChunk rows (vector lists + backend tag); sets chunk_count, indexed_at.
+- Storage: DocumentChunk.embedding JSONField = the vector store in default backend.
+- Retrieval: store.retrieve (load all vectors, L2-normalize, cosine = matrix @ query.T,
+  top-k) + rag.retrieve_context (MIN_SCORE=0.05 filter; returns {document_id,
+  document_title, source_url, chunk_index, text<=1200, score}; never raises - empty/failed
+  KB -> None).
+- Citation: chat/services -> ChatMessage.sources -> ChatPanel collapsible "Knowledge-base
+  sources (n)". Every non-escalation answer carries sources.
+- APIs: GET/POST /api/rag/documents/, GET/PATCH/DELETE .../<pk>/, GET .../chunks/,
+  POST /api/rag/reindex/ (admin), POST /api/rag/retrieve/ (probe).
+
+=====================================================================================
+23. Vector Database / Qdrant
+=====================================================================================
+- Default backend is NOT Qdrant - local numpy/SQLite cosine scanner (settings.VECTOR_BACKEND
+  default "local"; qdrant_client NOT installed - verified).
+- store.py dispatch: _retrieve_qdrant only when VECTOR_BACKEND=="qdrant" AND VECTOR_DB_URL
+  set; if client import fails -> logs warning, falls back to local (_retrieve_local_direct).
+  Qdrant path: QdrantClient(url, api_key) -> client.search(collection_name="aimhra_kb",
+  query_vector, limit) -> [(hit.id, hit.score)].
+- Vectors: TF-IDF (5000-dim, corpus-fitted) or OpenAI 1536-dim embeddings of 900-char
+  chunks; query vector embedded with SAME backend.
+- Settings: VECTOR_BACKEND, VECTOR_DB_URL, VECTOR_DB_API_KEY (env).
+
+=====================================================================================
+24. API Reference (all endpoints, from config/urls.py + app urls.py)
+=====================================================================================
+All require JWT unless noted. Envelope {success,data} or {success:false,error{code,message,details}}.
+
+Auth /api/auth/ (accounts/urls.py):
+- POST login/ (public) {username,password} -> LoginView -> role guard + audit LOGIN/LOGIN_FAILED.
+- POST refresh/ (public) {refresh} -> CustomTokenRefreshSerializer (revalidates role+active).
+- POST logout/ {refresh} -> blacklists refresh token.
+- GET/PATCH profile/ -> self profile; audit PROFILE_UPDATED.
+- POST change-password/ {current_password,new_password} -> validates + hashes.
+- POST password-reset/ (public) {email} -> generic response (no enumeration); console email.
+- GET/POST users/ (ADMIN) -> list/create; validate+hash password; audit.
+- GET/PATCH/DELETE users/<pk>/ (ADMIN) -> soft delete (is_active=False).
+
+Patients /api/patients/:
+- GET "" ?search= (staff) scoped list + summaries.
+- POST "" (staff) create (creator auto-granted).
+- GET/PATCH <pk>/ (staff+access) detail/update.
+- GET/POST assignments/ (ADMIN); DELETE assignments/<pk>/ (ADMIN).
+- GET (prefix /api/admin/) stats/ (ADMIN) SystemStatsView.
+
+Assessments /api/assessments/:
+- POST "" (staff) {patient,...} -> serializer validation -> create_assessment pipeline;
+  errors 400 validation, 403 access, 503 MODEL_UNAVAILABLE.
+- GET "" ?patient= (staff) scoped list.
+- GET <pk>/ (staff+access) detail.
+- GET risk-history/ ?patient= (staff+access).
+- GET risk-trends/ ?patient= (staff+access) + non-predictive disclaimer.
+- GET alerts/ ?patient=&status=&category= (staff).
+- POST alerts/<pk>/ack/ (IsHealthcareWorker) {status: ACKNOWLEDGED|RESOLVED}.
+
+Models /api/models/:
+- GET "" (staff) all ModelVersion rows.
+- GET compare/ (staff) latest RF vs XGB + production + criterion.
+- POST <pk>/activate/ (ADMIN) promote to production, retire others, audit.
+- GET feature-importance/ (staff) global importances (503 if none).
+- GET diagnostics/ (staff) {available, production} or unavailable reason.
+
+RAG /api/rag/: documents/ GET+POST (write admin); documents/<pk>/ GET/PATCH/DELETE;
+documents/<pk>/chunks/ GET; reindex/ POST (admin); retrieve/ POST {question, top_k?}.
+
+Chat /api/chat/: sessions/ GET+POST (scoped; POST requires patient); sessions/<id>/
+GET/DELETE (delete: owner or admin); POST sessions/<id>/send/ {message <= 4000} -> {reply}.
+
+Reports /api/reports/: GET "" ?patient= (latest 50); POST "" {assessment} -> 201
+{report, download_url}; GET <pk>/download/ (access-checked FileResponse).
+
+Audit /api/audit/: GET "" ?action=&username= (ADMIN only), paginated.
+
+Meta: GET /api/schema/, GET /api/docs/ (Swagger), /admin/ (Django admin).
+=====================================================================================
+25. Frontend Pages
+=====================================================================================
+- Login.jsx (/login, public): username+password card; login(); error alert; disclaimer.
+- hcw/Dashboard.jsx (/app/dashboard HCW): Promise.all(patients, OPEN alerts, assessments)
+  -> StatCards + high-priority alert table + high-risk list + recently added + recent
+  assessments; links into PatientDetail with ?tab=.
+- hcw/Patients.jsx (/app/patients): fetch once; client search (code/name/phone/email) +
+  risk-first sort (high->mid->low, then newest); columns code, name, contact, computed age,
+  gest wk, current risk badge+confidence, trend arrow, assessments, last visit, open alerts.
+- hcw/PatientNew.jsx (/app/patients/new): 17-field form; requires full_name; null/number
+  coercion; maps 400 details to field errors; navigates to new patient.
+- hcw/PatientDetail.jsx (/app/patients/:id): loads patient+trend+alerts+assessments in
+  parallel; 7 URL-driven tabs (overview/info/assessment/history/alerts/chat/reports);
+  generateReport() = generate+download.
+- hcw/Alerts.jsx (/app/alerts): OPEN alerts, category filter, severity sort, Ack/Resolve.
+- hcw/Reports.jsx (/app/reports): latest 50; (direct /media/ href - see Section 38).
+- admin/Dashboard.jsx (ADMIN): stats + diagnostics -> StatCards, RiskDistributionChart pie,
+  platform activity.
+- admin/Users.jsx (/app/admin/users): user table + create form (role HCW/ADMIN),
+  activate/deactivate toggle, patient-assignment form + table.
+- admin/Models.jsx (/app/admin/models): compare+list+feature importance; MetricBars,
+  comparison table (incl. high_risk_recall), Activate buttons, confusion matrices, version history.
+- admin/Knowledge.jsx (/app/admin/knowledge): upload form (file or pasted text via
+  FormData), delete, re-index, retrieval probe.
+- admin/Audit.jsx (/app/admin/audit): filterable (action select, username) paginated table.
+
+=====================================================================================
+26. Frontend Components
+=====================================================================================
+- Layout.jsx: role-based sidebar (NAV_BY_ROLE), user chip, sign-out, <Outlet/>.
+- ProtectedRoute.jsx (roles?, children): booting->Loading; !user->/login (preserve from);
+  role not in {HCW,ADMIN}->/login; role not in roles->own dashboard.
+- ui.jsx: RiskBadge(level,size) LOW/MID/HIGH with icon; CategoryBadge(category incl
+  EMERGENCY); StatCard(label,value,sub,tone); Loading/ErrorState(code+message+retry)/
+  EmptyState/Disclaimer.
+- charts/index.jsx: RiskTrendChart (step line low/mid/high), RiskDistributionChart (donut),
+  ShapBars (red=+green=-, zero line), FeatureImportanceChart, ConfusionMatrix (heat table),
+  MetricBars (RF vs XGB across 6 metrics).
+- patient/AssessmentPanel.jsx: the assessment form + PredictionResult (emergency/high-concern
+  banners, risk badge, probability bars, SHAP chart, trend-vs-previous, rules applied,
+  disclaimer, next actions).
+- patient/HistoryPanel.jsx: trend + all-assessments table + per-row PDF.
+- patient/AlertsPanel.jsx: per-patient ack/resolve.
+- patient/ProfilePanel.jsx: editable profile form, success notice, field errors.
+- patient/ChatPanel.jsx: session sidebar, message stream, optimistic echo, typing dots,
+  escalation badge, collapsible sources, generation-mode line, Enter-to-send, 4000 cap.
+- patient/ReportsPanel.jsx: reports table via authorized download only.
+- constants/clinical.js: BLOOD_GROUPS + bloodGroupOptions() (keeps legacy values selectable);
+  "keep in sync with backend validator" comment.
+- utils/reportDownload.js: blob -> object URL -> anchor -> revoke.
+=====================================================================================
+27. Frontend Services
+=====================================================================================
+All in frontend/src/services/auth.js (single domain-services module).
+- authService: login (stores tokens, returns user), logout (blacklist + clear), profile,
+  updateProfile, changePassword, requestPasswordReset.
+- patientService: list, create, detail, update, assignments, createAssignment, deleteAssignment.
+- assessmentService: create, list, history, trend, alerts, ackAlert.
+- modelService: list, compare, activate, featureImportance, diagnostics.
+- chatService: sessions, createSession, session, send, deleteSession.
+- kbService: documents, upload(FormData), deleteDocument, reindex, retrieve, chunks.
+- reportService: list, generate, download (blob).
+- adminService: stats, users, createUser, updateUser, auditLogs.
+Why: components never construct URLs/handle tokens; changing an endpoint touches one
+function; error normalization centralized.
+
+=====================================================================================
+28. Configuration and Environment Variables
+=====================================================================================
+backend/.env.example (read in config/settings.py):
+- SECRET_KEY (settings.17): Django signing - SECRET (change in prod).
+- DEBUG (18): dev mode, adds testserver host + verbose debug_trace.
+- ALLOWED_HOSTS (19): comma list.
+- DATABASE_URL (82): optional postgres/mysql switch - SECRET if it embeds credentials.
+- CORS_ALLOWED_ORIGINS (144): allowed frontend origins.
+- JWT_ACCESS_MINUTES / JWT_REFRESH_DAYS (137-138): 30 min / 7 days.
+- DATASET_PATH (165), MODEL_SELECTION_CRITERION (167), ML_ARTIFACTS_DIR (166).
+- LLM_API_KEY (172) - SECRET; empty => LLM-free fallback. LLM_BASE_URL (173),
+  LLM_MODEL (174), LLM_TIMEOUT_SECONDS (175).
+- EMBEDDING_BACKEND (176): local|openai. VECTOR_BACKEND (177): local|qdrant.
+  VECTOR_DB_URL (178), VECTOR_DB_API_KEY (179) - SECRET.
+- EMAIL_BACKEND (184) console default; DEFAULT_FROM_EMAIL (185).
+
+frontend/.env.example: VITE_API_BASE_URL=/api (dev works through Vite proxy). vite.config.js
+also honors VITE_API_PROXY_TARGET.
+
+!!! CRITICAL: backend/.env.example contains what appears to be a REAL OpenAI API key in
+plaintext. It should be treated as compromised: revoke/rotate and purge from git history.
+The file is also listed as modified in git status.
+
+=====================================================================================
+29. Package Dependencies
+=====================================================================================
+- backend/requirements.txt (15 entries, loose ranges): each role in Section 3. Problems:
+  requests unused; pypdf missing (used by kb ingestion; installed ad-hoc in venv at 6.16.1
+  so it works here but not a fresh install); dj_database_url only for postgres.
+- frontend/package.json: scripts dev/build/lint(oxlint)/preview. Runtime: axios, react,
+  react-dom, react-router-dom, recharts. Dev: types, plugin-react, oxlint, vite.
+  package-lock.json exists.
+- No Python lockfile / no pipenv/poetry; loose ranges only.
+=====================================================================================
+30. Database Migrations
+=====================================================================================
+- accounts/0001: creates User; original role choices were PATIENT/HCW/ADMIN default PATIENT
+  (fossil evidence of pre-refactor design). Header note "Django 6.1".
+- accounts/0002: role choices -> HCW/ADMIN default HCW + data migration
+  deactivate_legacy_patient_accounts (is_active=False for PATIENT rows; reverse noop).
+- patients/0001: PatientProfile WITH a user OneToOne + PatientAssignment + indexes.
+- patients/0002: the standalone-record refactor - adds contact/notes/is_active/archived_at/
+  created_by; data migration copy_legacy_user_data_to_patient_record (copies name/email/phone
+  from linked user); REMOVES the user FK; adds created_by index.
+- assessments/0001: Assessment/Prediction/Alert + indexes; Prediction FK -> ModelVersion.
+- mlcore/0001: ModelVersion (unique name+version; status index).
+- kb/0001: KnowledgeDocument + DocumentChunk (embedding JSON).
+- chat/0001: ChatSession + ChatMessage (escalation/sources/generation_mode).
+- reports/0001: Report (file, patient, assessment, generated_by).
+- audit/0001: AuditLog (17 original actions) + index.
+- audit/0002: adds PATIENT_CREATED / PATIENT_UPDATED choices.
+The 0002 trilogy (accounts/patients/audit) is one coordinated refactor: patients stop being
+users; history preserved, never deleted.
+
+=====================================================================================
+31. Tests
+=====================================================================================
+All backend Django TestCase; frontend: none (oxlint only).
+- accounts/tests.py: two roles only (ROLE_PATIENT absent asserted); default role; register
+  404; HCW/Admin login; legacy PATIENT login/refresh/access 401; inactive; failed login ->
+  structured + audited; worker 403 on audit/users; admin user mgmt no PATIENT; logout blacklist.
+- patients/tests.py: worker creates patient (code P-, creator recorded); server-side code;
+  audited; unauthenticated 401; admin all; worker own only; search; blood group validation
+  incl Rh-less; cannot spoof created_by; system stats exclude PATIENT.
+- assessments/tests.py: RuleEngineTests (versioned, EMERGENCY thresholds, symptoms, normal,
+  unknown ignored, keyword); TrendTests (improving/increasing/baseline); AssessmentAPITests
+  (quick model): create 201, emergency alert, SHAP persisted, range 400, dia>sys 400,
+  unknown symptom 400, future date 400, cross-worker 403 no row, assigned-patient access,
+  admin any, history/trend, 503 MODEL_UNAVAILABLE no fabrication.
+- mlcore/tests.py: dataset loads (6103, 3 classes); cleaning documented; identifiers not
+  features / no leakage; Preprocessor fit/transform/impute + roundtrip + unfit guard;
+  quick-train -> production bundle; prediction shape/labels/probs sum ~1; model version
+  recorded; explanation structure + disclaimer; missing feature -> ModelUnavailableError;
+  no model -> 503 shape.
+- chat/tests.py: worker session bound to own patient; cross-patient 403; cross-worker open
+  403; emergency message bypasses LLM (escalation, audited); safe answer without LLM; RAG
+  sources when KB populated; no fabricated sources empty KB; both messages persisted; empty
+  400; title from first message; owner-only delete.
+- kb/tests.py: chunking overlap; empty no chunks; indexing persists embeddings; empty doc
+  raises; retrieve returns scored sources with right title; empty KB -> None; unrelated low
+  scores; admin upload 201; worker upload 403; retrieve-on-empty; reindex admin.
+- reports/tests.py: quick model; worker generates own patient PDF (%PDF, >1000 bytes); Report
+  row; download 200 owner / 403 stranger; API generation audited.
+- backend/scripts/smoke_test.py (runnable E2E): login, register-404, patient, emergency
+  assessment, history/trend, chat escalation + safe, KB upload + retrieve, report PDF,
+  model compare (production XGBoost), audit visibility/403.
+
+Missing/weak: no frontend tests; no password-reset email tests; no reindex happy path;
+no activate 404 test; tests rely on quick model (no metric-quality regression check).
+
+=====================================================================================
+32. End-to-End User Workflows (traced)
+=====================================================================================
+1. Login: Login.jsx -> authService.login -> POST login/ -> role guard+audit -> tokens ->
+   localStorage + setUser -> navigate dashboard -> ProtectedRoute -> RoleDashboard.
+   Failure: 401 envelope -> red alert; legacy role same 401 (audited role_not_allowed).
+2. Add patient: PatientNew -> client checks -> patientService.create -> POST patients/ ->
+   serializer validation -> save(created_by) -> audit -> 201 with patient_code -> navigate
+   to detail. Failure: 400 details -> field errors.
+3. Risk assessment: form validate -> POST assessments/ -> _resolve_patient (explicit patient
+   + access) -> serializer (ranges/vocab/no future) -> create_assessment: predict -> rules
+   -> atomic persist -> audit -> trend -> response -> PredictionResult.
+   Failures: no model -> 503 (nothing saved); validation -> 400 field errors; permission -> 403.
+4. View history: HistoryPanel -> trend(patientId) -> risk-trends/ -> series + trend ->
+   RiskTrendChart + table + per-row PDF.
+5. Generate report: button -> reportService.generate -> POST reports/ -> access+prediction
+   checks -> generate_report (ReportLab) -> 201 -> downloadReport -> authorized FileResponse.
+6. AI chat: ChatPanel -> sessions -> open/create -> POST send/ -> title auto-set ->
+   respond() pipeline -> reply persisted -> optimistic UI + escalation banner/sources.
+   Failures: empty/long 400; API error bubble "Sorry - <msg>"; LLM down -> fallback modes.
+=====================================================================================
+33. Feature -> Code Location Map
+=====================================================================================
+Feature | Frontend | Backend (view/service) | Database | Main files
+Login | pages/auth/Login.jsx, context/AuthContext.jsx | accounts/views.LoginView, accounts/serializers | accounts_user | api/client.js, config/settings.py (SIMPLE_JWT)
+JWT/refresh/logout | api/client.js interceptors | TokenRefreshView, LogoutView, custom refresh serializer | token_blacklist | accounts/urls.py
+Patient mgmt | PatientNew.jsx, Patients.jsx, ProfilePanel.jsx | patients/views.py, selectors.py | patients_patientprofile, _patientassignment | patients/serializers.py
+Patient assignment | admin/Users.jsx | PatientAssignmentList/DetailView | same | patients/urls.py, admin_urls.py
+Risk assessment | patient/AssessmentPanel.jsx | assessments/views.AssessmentListCreateView, services.create_assessment | assessments_assessment | assessments/serializers.py
+ML prediction | probability bars in PredictionResult | mlcore/registry.predict | assessments_prediction (+ mlcore_modelversion) | mlcore/training.py, ml_artifacts
+SHAP | charts.ShapBars | mlcore/explain.explain_prediction | Prediction.explanation JSON | mlcore/constants.FEATURE_LABELS
+Rule engine | rule lists in PredictionResult, CategoryBadge | assessments/rules/engine.py + rules.json | rules_version on Alert/ChatMessage | rules/keywords.py
+Alerts | Alerts.jsx, AlertsPanel.jsx, dashboards | AlertListView, AlertAckView, alert creation in services | assessments_alert | assessments/urls.py
+Risk history | HistoryPanel.jsx | RiskHistoryView, prediction_series | Assessment+Prediction | assessments/services.py
+Risk trend | charts.RiskTrendChart | RiskTrendView, trends.compute_trend | (derived) | assessments/trends.py
+PDF reports | ReportsPanel.jsx, utils/reportDownload.js | reports/views.py, services.generate_report | reports_report (+ media/reports/) | reportlab
+AI assistant | patient/ChatPanel.jsx | chat/views.py, services.respond, llm.py | chat_chatsession, chat_chatmessage | rules/keywords.py
+RAG / KB | admin/Knowledge.jsx | kb/views.py, services/* | kb_knowledgedocument, kb_documentchunk | kb/urls.py
+Vector search | - | kb/services/store.py, rag.py | DocumentChunk.embedding / optional Qdrant | settings.VECTOR_BACKEND
+LLM | - | chat/llm.py | (no storage beyond messages) | .env LLM_*
+Auth guards (FE) | ProtectedRoute.jsx, App.jsx | role checks server-side | - | Layout.jsx
+Audit logs | admin/Audit.jsx | audit/views.py, services.log_event | audit_auditlog | called from every app
+Model management | admin/Models.jsx, admin/Dashboard.jsx | mlcore/views.py | mlcore_modelversion | train_models command
+
+=====================================================================================
+34. File -> Responsibility Map
+=====================================================================================
+File | Responsibility | Key items | Used by
+config/settings.py | all configuration | apps/middleware/DRF/JWT/CORS/DB/ML/LLM/logging | everything
+config/urls.py | route table | 10 includes + schema/docs | Django
+core/permissions.py | role permissions | IsHealthcareWorker, IsAdmin, IsAdminOrReadOnly | accounts,patients,assessments,mlcore,kb,audit
+core/exceptions.py | error envelope | ApiError, structured_exception_handler, flatten_error_messages | DRF globally
+core/middleware.py | JSON for non-DRF errors | StructuredErrorMiddleware | settings
+core/pagination.py | page envelope | StandardPagination | list views
+core/responses.py | ok() helper | success envelope | all views
+accounts/models.py | User + role | save() derives is_staff | auth everywhere
+accounts/serializers.py | login/refresh guards | CustomTokenObtainPairSerializer, CustomTokenRefreshSerializer | views + SIMPLE_JWT settings
+accounts/views.py | auth + user mgmt | LoginView, LogoutView, ProfileView, ChangePasswordView, PasswordResetRequestView | accounts/urls.py
+patients/models.py | patient records | generate_patient_code, PatientProfile, PatientAssignment | assessments/chat/reports
+patients/selectors.py | access + summaries | can_access_patient, scoped_patient_queryset, patient_ids, patient_summaries | all patient apps
+patients/serializers.py | IO validation | blood-group/gravidity/week validators; summary fields | views
+patients/views.py | patient + assignment + stats | PatientListView/DetailView, assignment views, SystemStatsView | urls
+assessments/models.py | clinical tables | Assessment.feature_values, Prediction, Alert | services, views, reports
+assessments/serializers.py | input validation | AssessmentSerializer (ranges/vocab/cross-field) | views
+assessments/services.py | the pipeline | create_assessment, prediction_series, DISCLAIMER | views, tests
+assessments/views.py | assessment/history/trend/alerts APIs | _resolve_patient + 5 views | urls
+assessments/trends.py | trend algorithm | compute_trend | services, selectors, reports
+assessments/rules/engine.py | deterministic rules | load_rules, evaluate | services, chat, serializer, tests
+assessments/rules/rules.json | rule data v1 | 21 rules, vocab, messages | engine
+assessments/rules/keywords.py | chat text -> symptoms | KEYWORD_MAP, detect_symptoms | chat services
+mlcore/constants.py | ML contract | FEATURES, RISK_LEVELS, PLAUSIBILITY_RANGES, FEATURE_LABELS | everything ML + serializer
+mlcore/dataset.py | load/validate/clean | load_raw_dataset, validate, clean, feature_matrix | training, inspect, synthetic
+mlcore/preprocessing.py | median imputer | Preprocessor | training, registry
+mlcore/training.py | train RF+XGB | train_all, TRAIN_CONFIG | command, tests
+mlcore/evaluation.py | metrics + selection | evaluate_classifier, selection_score | training, command
+mlcore/registry.py | serving | get_production_bundle, predict, feature_importance | assessments services, views
+mlcore/explain.py | SHAP | explain_prediction (+fallback) | registry
+mlcore/exceptions.py | 503 error type | ModelUnavailableError | registry, services
+mlcore/models.py | model registry table | ModelVersion | command, views, registry
+mlcore/views.py | model APIs | list/compare/activate/importance/diagnostics | urls
+mlcore/commands/*.py | CLI ops | train_models, inspect_dataset, generate_synthetic | operator
+mlcore/synthetic.py | research-only synthetic | generate_synthetic_temporal, quality_report | command
+kb/models.py | docs + chunks | KnowledgeDocument, DocumentChunk | services, views
+kb/services/ingestion.py | extract + chunk + sha256 | extract_text (pypdf), chunk_text (900/150) | indexing
+kb/services/embeddings.py | TF-IDF / OpenAI vectors | fit_corpus, embed_texts | indexing, rag
+kb/services/indexing.py | index pipeline | index_document, _reembed_others | views
+kb/services/store.py | vector store + Qdrant | retrieve, _retrieve_qdrant | rag
+kb/services/rag.py | retrieval + citations | retrieve_context (TOP_K=5, MIN_SCORE=0.05) | chat, views
+kb/views.py / urls.py / tests.py | KB APIs | upload/reindex/retrieve/chunks | config urls
+chat/models.py | sessions/messages | ChatSession, ChatMessage | services, views
+chat/services.py | safety pipeline | respond, _patient_context, CHAT_DISCLAIMER | SendMessageView
+chat/llm.py | LLM client | SYSTEM_PROMPT, FALLBACK_NO_LLM, generate_answer | services
+chat/views.py | session/send APIs | SessionListCreateView, SendMessageView | urls
+reports/models/services/views | PDF reports | generate_report (ReportLab), download | config urls
+audit/models/services/views | audit trail | 19 actions, log_event (redaction), admin-only list | every app
+frontend/src/api/client.js | http core | storage, interceptors, unwrap, apiError, api | all services
+frontend/src/services/auth.js | endpoint wrappers | 8 service objects | all pages/panels
+frontend/src/context/AuthContext.jsx | auth state | provider, useAuth, forced-logout listener | guards, layout, login
+frontend/src/App.jsx, main.jsx | routing/boot | route tree, RoleDashboard | -
+charts/index.jsx, components/*, pages/** | UI | Section 25/26 | -
+backend/scripts/smoke_test.py | E2E | full workflow asserts | operator
+backend/data/dataset_report.json | inspection report | rows, cleaning, numeric summary | documentation
+=====================================================================================
+35. Technology -> Why Map
+=====================================================================================
+Technology | Where used | Why | Provides
+Django | whole backend | ORM, auth, admin, migrations | secure data layer + rapid CRUD
+DRF | all APIs | serialization, auth pluggability, pagination, exceptions | consistent JSON APIs
+SimpleJWT | settings+accounts | stateless staff auth + blacklist | scalable API auth
+cors-headers | middleware | SPA 5173 <-> API 8000 | cross-origin dev
+drf-spectacular | urls | auto OpenAPI + Swagger | living API docs
+python-dotenv | settings | 12-factor config | secret management
+SQLite | default DB | zero-config dev | file DB; swap via DATABASE_URL
+pandas/numpy | mlcore, kb store | data wrangling + vector math | ML pipeline
+scikit-learn | training/eval/embeddings | RF, splits, metrics, TF-IDF | model 1 + retrieval
+XGBoost | training | strong tabular booster | model 2 (current production per smoke test)
+SHAP | explain | tree attributions | explainable predictions
+joblib | persistence | bundle model+preprocessor+meta | hot-swappable models
+reportlab | reports | programmatic PDF | downloadable records
+openai SDK | chat/kb | OpenAI-compatible HTTP | LLM + optional embeddings
+React 19 | SPA | component UI | interactive staff console
+Vite | tooling | dev server + proxy + build | DX
+react-router 7 | routing | nested layouts + guards | role-aware navigation
+axios | client | interceptors (JWT/refresh) | resilient API calls
+recharts | charts | trend/pie/bars/confusion | data comprehension
+oxlint | linting | hook-safety rules | code hygiene
+
+=====================================================================================
+36. Security Analysis
+=====================================================================================
+Implemented (verified in code):
+- Password hashing via Django set_password everywhere; passwords never serialized.
+- AUTH_PASSWORD_VALIDATORS + validate_password on change/create.
+- JWT: short access (30m), blacklistable refresh, role+active revalidation on refresh,
+  generic 401 messages.
+- Role permissions + object-level patient scoping reused everywhere; explicit patient
+  parameter required (no accidental cross-record access).
+- Structured errors never leak stack traces (debug_trace DEBUG-only).
+- Audit logging with REDACTED_KEYS (password, token, access, refresh, secret, ssn) +
+  "never store medical values or chat content"; admin-only read.
+- ORM-only queries -> SQL injection structurally prevented; no raw SQL.
+- XSS: React escapes; no dangerouslySetInnerHTML anywhere.
+- File-download authorization (ReportDownloadView, tested).
+- Input validation at 3 layers (UI, serializer, rule plausibility); chat length cap.
+- Generic password-reset response (no enumeration). Soft-delete users. .gitignore excludes
+  .env/db/media/artifacts.
+
+Should be improved (gaps, honestly stated):
+1. Committed-looking API key in .env.example - rotate/revoke/purge. TOP PRIORITY.
+2. Tokens in localStorage (XSS-exfiltratable); httpOnly cookies safer.
+3. No rate limiting/throttling on login or chat (DRF throttles not configured).
+4. django admin relies on session/CSRF - fine but dual auth scheme.
+5. pages/hcw/Reports.jsx direct /media/ link bypasses authorized download.
+6. pypdf / dj_database_url missing from requirements.
+7. Password-reset flow incomplete on frontend: no /reset-password route.
+8. JWT stateless - stolen access token valid up to 30 min; no token binding.
+9. No explicit SECURE_* settings (HSTS, secure cookies, SSL redirect).
+10. audit ip_address trusts X_FORWARDED_FOR first (spoofable unless proxy strips it).
+11. Model artifact integrity not verified at load.
+=====================================================================================
+37. Error Handling
+=====================================================================================
+Backend layers:
+- core/exceptions.py contract: every DRF error -> {success:false,error{code,message,details}}.
+  Http404->NOT_FOUND; PermissionDenied->PERMISSION_DENIED; ApiError -> its code/status;
+  ValidationError -> VALIDATION_ERROR + field details; NotAuthenticated/AuthenticationFailed
+  -> AUTHENTICATION_ERROR; set_rollback on API exceptions; unhandled -> logged + opaque
+  INTERNAL_ERROR 500. flatten_error_messages makes field errors a readable sentence.
+- core/middleware.py: StructuredErrorMiddleware converts HTML 404/500 on /api/* to JSON;
+  process_exception returns 500 JSON (debug_trace only in DEBUG).
+- Domain fail-safes: ModelUnavailableError->503 with hint (never fabricate); SHAP failure ->
+  method "unavailable" (never takes endpoint down); llm.generate_answer raises nothing;
+  rag.retrieve_context never raises -> None; chat fallback modes; create_assessment
+  transaction.atomic (all-or-nothing); log_event never breaks request; KB ValueError ->
+  delete + 400; activate 404 ApiError; send message 400 on empty/long.
+
+Frontend layers:
+- api/client.js: single-flight 401 refresh-and-retry; on failure clear tokens + broadcast
+  aimhra:logout (guards redirect to /login). apiError normalizes envelopes + network errors.
+- Component pattern: Loading -> ErrorState(retry) -> EmptyState -> content; forms map
+  error.details onto field errors; ChatPanel inserts "Sorry - <msg>" assistant bubble.
+
+Failure traces:
+Invalid login -> 401 AUTHENTICATION_ERROR + LOGIN_FAILED audit -> red alert.
+Invalid assessment -> 400 VALIDATION_ERROR field details -> inline errors; nothing saved.
+No model -> 503 MODEL_UNAVAILABLE -> aborts before ANY write.
+Corrupt artifact -> 503 with artifact-path message.
+SHAP crash -> prediction returned, explanation method="unavailable".
+LLM down/unset -> rag_only_fallback or no_llm_configured (visible modes).
+Report by stranger -> 403 (tested).
+Any unhandled error -> 500 JSON, stack only in logs (trace only in DEBUG).
+
+=====================================================================================
+38. Unused / Dead / Suspicious Code
+=====================================================================================
+Found by tracing imports and git status. Nothing was modified or deleted.
+- requests dependency: declared, not imported anywhere - dead dependency.
+- pypdf: used by kb ingestion but MISSING from requirements (inverse problem).
+- dj_database_url: imported only when DATABASE_URL is postgres; NOT installed - a postgres
+  DATABASE_URL would crash settings.
+- ACTION_REGISTER (audit/models.py): dead constant - register endpoint removed (404);
+  still in AdminAudit.jsx filter options.
+- Password-reset dead link: PasswordResetRequestView emails /reset-password?token= but no
+  /reset-password route in App.jsx (unreachable UX).
+- backend/admin.txt: empty file. full_test_out.txt / build_out.txt: stray untracked output.
+- visualization.ipynb: untracked notebook, unreferenced. pv1.zip: unexplained archive.
+- Root Mathernal_Risk.csv: duplicate; only consumer scripts/dataset_profile.py (hardcoded
+  absolute path).
+- /media/ direct link in pages/hcw/Reports.jsx: bypasses authorized download endpoint;
+  unsafe in production.
+- Shared-bundle mutation in mlcore/registry.predict (lines 87-88): writes
+  _predicted_index/_predicted_label onto cached shared bundle; under concurrent requests two
+  predictions could interleave before explain_prediction reads them - a real (if unlikely)
+  race affecting SHAP target class.
+- kb/services/ingestion.py chunk_text docstring says markdown headings become section
+  metadata, but no heading extraction implemented; DocumentChunk.section stays empty.
+- Envelope inconsistency: several list endpoints return manual {results,count} though
+  StandardPagination paginated (first 20, no page param sent by FE); reports/chat return
+  {reports}/{sessions}; frontend defensive d.results ?? d absorbs it.
+- First-page-only lists: Patients/Dashboard/Alerts fetch page 1 (20) and sort client-side;
+  >20 records silently shows a subset (no pager except AdminAudit).
+- IsAdminOrReadOnly: used only by kb app (single consumer).
+No TODO/FIXME, no console.log/print debug in app code, no hardcoded credentials other than
+the .env.example API key already flagged.
+=====================================================================================
+39. Strengths
+=====================================================================================
+1. True separation of concerns - views (HTTP) / serializers (validation) / services &
+   selectors (logic) / registry (artifacts).
+2. Train/serve preprocessing parity by construction - Preprocessor serialized in the bundle
+   and serializer validates against the same PLAUSIBILITY_RANGES.
+3. Explainability first-class - SHAP persisted per prediction, rendered in UI + PDF, with
+   anti-causation disclaimer in the payload.
+4. Deterministic versioned safety layer that outranks everything - rules.json v1 is data,
+   stamped on every Alert/ChatMessage; chat bypasses LLM on escalation.
+5. Fail-safe defaults everywhere - 503 instead of fabrications; SHAP/chat/RAG degrade
+   gracefully; audit never breaks the request.
+6. Honest scope boundaries - "does not predict future risk" enforced in trends.py, API,
+   UI, PDF, and asserted by tests.
+7. Model governance - ModelVersion registry (md5, hyperparams, metrics, criterion,
+   lifecycle), predictions pinned to model_ref, admin-only activation + audit.
+8. Centralized access control - one can_access_patient reused by patients/assessments/
+   alerts/reports/chat.
+9. Consistent API envelope + resilient client - {success,data|error}; single-place axios
+   refresh/blacklist with single-flight.
+10. Test depth - cross-worker isolation (403 no row), legacy-role rejection at 3 layers,
+    no-fabrication, rule/trend/RAG/report tests, runnable E2E smoke script.
+11. Research hygiene - synthetic module quarantined, flagged, quality-gated, documented.
+12. Accessibility-minded UI - color never sole indicator (icon + text).
+
+=====================================================================================
+40. Weaknesses
+=====================================================================================
+1. Secret hygiene - apparent real API key in .env.example; no CI/lint gate.
+2. Auth tokens in localStorage + no throttling on login/refresh/chat.
+3. Dependency mgmt - unused requests, missing pypdf/dj_database_url; no Python lockfile.
+4. FE pagination blind spot - lists fetch page 1 only; no pager outside audit.
+5. Inconsistent response envelopes -> defensive frontend parsing.
+6. RAG scalability - every upload refits corpus TF-IDF + re-embeds all docs; retrieval loads
+   all chunk vectors into memory.
+7. predict() shared-bundle race (Section 38).
+8. Unauthorized /media/ report link in one page.
+9. Duplication between FE validation (AssessmentPanel FIELDS vs PLAUSIBILITY_RANGES;
+   clinical.js "keep in sync" comment).
+10. No deployment story - no Dockerfile/gunicorn/nginx/CI; SQLite default; media DEBUG-only.
+11. Documentation - root README nearly empty; frontend README is Vite boilerplate.
+12. Dead/inert artifacts - admin.txt, full_test_out.txt, build_out.txt, pv1.zip, duplicate CSV.
+13. Password-reset flow incomplete on frontend.
+14. Test gaps - no frontend tests, no reset-email/throttle tests; tests rely on quick models.
+
+=====================================================================================
+41. Limitations (including medical/safety boundaries)
+=====================================================================================
+Each boundary is implemented, not just claimed:
+- Risk level != diagnosis: DISCLAIMER returned in every assessment, printed in PDF, shown
+  by UI Disclaimer.
+- Trend != future prediction: trends.py docstring + API response + UI + PDF + test assert.
+- AI assistant != doctor: SYSTEM_PROMPT forbids diagnosis/prescription/exam claims;
+  CHAT_DISCLAIMER; escalation says "cannot provide emergency care".
+- SHAP != medical cause: EXPLANATION_DISCLAIMER "statistical contributions, not medical causes".
+- Rule thresholds not clinically certified: rules.json note "MUST be reviewed and approved
+  by qualified clinical stakeholders".
+- Model does not know patient history/demographics: only 8 assessment measurements are
+  model inputs; PatientProfile docstring.
+- Patients do not use the system: non-authenticating records; legacy accounts deactivated.
+- Data is not clean/consistent: glucose unit inconsistency recorded as a limitation.
+
+Other factual limitations: single data source (6,103 rows); one test split for production
+selection; local vector store default; LLM output not programmatically verified against
+sources (prompt-enforced grounding); no push notifications (alerts are pull-based).
+=====================================================================================
+42. How to Explain This Project in a Viva (short answers)
+=====================================================================================
+What is the project? A role-based maternal-health decision-support system. Healthcare
+workers record patient visits; an ML model classifies risk (low/mid/high) with
+probabilities; SHAP explains it; an independent rule engine raises safety alerts; history,
+trends, PDF reports, and a RAG-grounded assistant complete the workflow. Two staff roles.
+Why Django? ORM, auth (extensible User), migrations, admin, DRF - the safety layer plugs in
+as ordinary apps inside the same transactional boundary.
+Why React? Highly interactive staff console - tabbed workspaces, live forms, charts;
+component model + router + recharts.
+Why REST API? Forces safety-critical logic server-side where it can't be bypassed; thin SPA;
+uniform envelope lets one axios client handle auth/refresh/errors.
+Why JWT? Stateless API auth; 30m access + 7d refresh blacklisted at logout; refresh
+re-validates role + is_active from DB.
+Why XGBoost and Random Forest? Strong tabular classifiers, no scaling, predict_proba +
+feature_importances_; train both on identical splits; selection by high-risk-recall-first
+(because a missed high-risk case is the costliest error). Accuracy never sole basis.
+Why SHAP? Tree ensembles are black boxes; TreeExplainer gives per-feature contributions for
+the predicted class, persisted for reproducibility; red = pushes risk up, green = down;
+labeled as statistical, not causal.
+Why rule-based alerts in addition to ML? Model is probabilistic; emergencies must be
+deterministic (systolic >= 160 always escalates even if model says low risk). Versioned JSON
+rules are inspectable by clinicians.
+Why three risk levels? The dataset target has exactly three classes; inventing others would
+break train/serve consistency.
+Why a database? Longitudinal clinical value: each visit's inputs + exact model output stored
+(with model_ref) -> history, trends, reports, alerts, audit, reproducibility.
+Why RAG? So the assistant answers from trusted, cited documents, not LLM memory; top-5 above
+min score; prompt-constrained grounding; sources stored + rendered.
+Why a vector store/embeddings? Match question to document passages by meaning; chunks
+embedded (TF-IDF default, OpenAI optional) and ranked by cosine; local backend = zero infra,
+Qdrant swap-in.
+Why an AI assistant? Education/navigation; emergency rule engine checked FIRST and bypasses
+the LLM, so it can never talk a user out of seeking care.
+Why PDF reports? Assessments must be shareable/archival; ReportLab backend = one source of
+truth; download re-checks authorization per request.
+Why role-based access? Least privilege; worker sees only created/assigned patients
+(can_access_patient); admin manages users/models/KB/audit; same selector backs every endpoint.
+What's innovative? The combination: explainable ML persisted per prediction, a deterministic
+rule engine that provably outranks model + LLM, honest descriptive-only trends, versioned
+model governance, audit with redaction, graceful degradation (503 instead of fabrication,
+excerpt-fallback chat).
+Limitations? Single dataset, glucose unit inconsistency, no rate limiting, JWT in
+localStorage, local vector store loads everything, trends only last two visits, no FE tests,
+no deployment config.
+Future work? Rotate/purge exposed key; httpOnly-cookie auth; throttling; temporal dataset for
+real longitudinal modeling; Qdrant scale; background re-indexing; FE tests; Dockerized
+deploy with Postgres; clinical sign-off of rules.
+=====================================================================================
+43. Viva / Defense Question Bank (with answers grounded in this repo)
+=====================================================================================
+PROJECT OVERVIEW
+1. What does AIMHRA stand for? "Hybrid AI-Based Maternal Health Risk Analysis and
+   Healthcare Decision-Support System" (config/settings.py).
+2. Who are the users? HEALTHCARE_WORKER and ADMIN only; patients never log in.
+3. What happens on an emergency finding? Rule engine EMERGENCY -> Alert row + RULE_ESCALATION
+   audit + red banner; in chat the LLM is bypassed entirely.
+4. How many rules? 21 in rules.json v1 across four categories; each has id, category,
+   type (symptom/vital), description.
+
+ARCHITECTURE
+5. Walk a request through the system. Vite proxy -> Django URL -> DRF JWT auth ->
+   permission -> view -> serializer -> service -> ORM -> engine (ML/rules) -> envelope ->
+   axios unwrap -> React state.
+6. Where is business logic? Services/selectors (assessments/services.py, patients/selectors.py,
+   reports/services.py, chat/services.py, kb/services/*), not views.
+7. What is core/ for? Cross-cutting infrastructure: permissions, error contract, error
+   middleware, pagination, success helper.
+
+DJANGO / DRF
+8. Why a custom exception handler? Guarantee one error shape + code mapping +
+   flatten_error_messages for readable field errors + set_rollback for data safety.
+9. How does pagination work? StandardPagination (20/page, page_size param, max 100).
+10. What does drf-spectacular provide? Auto OpenAPI schema + Swagger UI.
+
+REACT
+11. How does the app restore a session on reload? AuthContext sees stored access token ->
+    GET /api/auth/profile/; failure clears tokens.
+12. What happens on a mid-session 401? Response interceptor refreshes once (single-flight),
+    retries; on failure clears tokens + broadcasts aimhra:logout; context clears user.
+13. How is route protection done? ProtectedRoute checks boot state, user existence, two valid
+    roles, then optional roles array; wrong role -> own dashboard.
+
+DATABASE
+14. Why is Prediction separate from Assessment? One visit, one derived output pinned to
+    model_ref; keeps raw inputs immutable, model outputs versioned.
+15. Why SET_NULL on many FKs? Preserve clinical history if the acting user/model row is removed.
+16. What do migrations 0002 do? Role refactor: PATIENT removed, legacy accounts deactivated
+    (accounts/0002); patient identity copied onto record + user FK dropped (patients/0002).
+
+AUTHENTICATION
+17. Where is the login role check? CustomTokenObtainPairSerializer.validate rejects roles
+    outside HCW/ADMIN; repeated at refresh.
+18. How is logout real if JWT is stateless? Refresh token blacklisted; access expires in 30m.
+
+ML
+19. Describe the split and why. Stratified 70/15/15, random_state=42; metrics from test only.
+20. What preprocessing? Median imputation fitted on training split only, persisted in bundle;
+    no scaling (trees).
+21. What if age=300 posted? Serializer range check -> 400; same ranges removed training rows.
+22. How is production chosen? selection_score with high_risk_recall_then_f1 criterion;
+    train_models retires others, marks winner PRODUCTION.
+23. What if no model registered? ModelUnavailableError -> 503; assessment not saved (tested).
+XGBOOST / RF SPECIFICS
+24. Key hyperparameters? RF: 400 trees, min_samples_leaf=2, class_weight=balanced_subsample.
+    XGB: 400 rounds, lr 0.08, depth 6, subsample 0.9, colsample 0.8, hist, mlogloss.
+25. Why class weights if balanced? Near-balanced so resampling rejected; weights kept as
+    safeguard; recorded in TRAIN_CONFIG.
+
+SHAP
+26. Which model, when? Production bundle, right after predict_proba, same vector; top-8.
+27. What do positive SHAP values mean? Feature pushed predicted-class probability up (red);
+    negative down (green) - model-level, not causal.
+
+RULES / ALERTS
+28. Can ML hide an emergency? No - rules run independently; EMERGENCY creates its own Alert
+    and, in chat, bypasses LLM.
+29. How to add a rule? Add a row to rules.json; engine hot-reloads on mtime; bump version.
+30. Alert lifecycle? OPEN -> ACKNOWLEDGED -> RESOLVED via /ack/, recording acknowledged_by.
+
+RAG / LLM / VECTOR
+31. Chunking? 900 chars with 150 overlap; empty -> no chunks -> clean 400.
+32. How is hallucination mitigated? Grounding prompt, cautious language, <=250 words, stored
+    + displayed sources, excerpt fallbacks.
+33. Default embedding/vector store? Local TF-IDF + numpy cosine over JSON vectors; Qdrant
+    optional, not installed.
+34. Empty KB? retrieve_context -> None; chat says no indexed knowledge matched - no fabrications.
+35. Which LLM? Any OpenAI-compatible; default gpt-4o-mini, temp 0.3, max 600 tokens, 45s timeout.
+
+SECURITY
+36. Where could SQL injection occur? Nowhere - all queries ORM; no raw SQL.
+37. How are downloads protected? /api/reports/<id>/download/ re-checks can_access_patient;
+    stranger 403 tested.
+38. Weakest security point? Exposed-looking key in .env.example; tokens in localStorage;
+    no login throttling.
+
+TESTING / DEPLOYMENT
+39. How do tests get a model without long training? train_all(quick=True) -> 10-tree models.
+40. How would you deploy? Postgres via DATABASE_URL, gunicorn behind nginx, DEBUG=False, real
+    SECRET_KEY, collectstatic, media on CDN/object storage, HTTPS - none configured in repo,
+    and I'd say so clearly.
+
+=====================================================================================
+44. Final Complete System Summary
+=====================================================================================
+AIMHRA is a staff-facing maternal-risk decision-support platform whose defining quality is
+defensive engineering: every stage of the pipeline has an explicit failure mode, an explicit
+disclaimer, and an explicit audit trail.
+- Identity & access: custom User with two roles; JWT access (30m) + blacklisted refresh
+  (7d); role re-validated at login AND refresh; object-level patient access via one shared
+  selector; legacy PATIENT role removed by migration and blocked at three layers.
+- Clinical workflow: standalone patient records (created-or-assigned visibility) -> visit
+  assessments capturing exactly 8 model features + fixed symptom vocabulary -> serializer
+  validation mirroring training-data plausibility ranges -> atomic persistence of
+  Assessment + Prediction + Alert.
+- Intelligence: RF and XGBoost trained on a documented, cleaned 6,057-row dataset (stratified
+  70/15/15, median-imputation preprocessor persisted in the artifact); production selection
+  by high-risk-recall-first criterion; versioned ModelVersion registry; every prediction
+  stamped with exact model name/version and a persisted SHAP top-8 explanation with an
+  anti-causation disclaimer.
+- Safety: a deterministic, versioned 21-rule engine (NORMAL->ATTENTION->HIGH_CONCERN->
+  EMERGENCY) that outranks the model, RAG, and LLM; alerts with a full acknowledge/resolve
+  lifecycle; chat messages scanned lexically for emergency phrases with LLM-bypassing
+  escalation.
+- Longitudinal view: history and trend computed ONLY over stored predictions (last-two-visit
+  comparison -> improving/stable/increasing), explicitly and repeatedly labeled as
+  non-predictive.
+- Knowledge & assistance: admin-curated RAG pipeline (PDF/TXT ingestion -> 900/150 chunking
+  -> TF-IDF or OpenAI embeddings -> cosine top-5 retrieval with score floor -> cited,
+  prompt-constrained OpenAI-compatible generation with excerpt fallbacks).
+- Output & oversight: ReportLab PDFs generated and authorization-checked server-side; an
+  admin console for users, assignments, model comparison/activation, knowledge management,
+  and system stats; an admin-only audit log of 19 action types with key redaction.
+- Quality posture: layered tests across auth, scoping, ML serving, rules, trends, RAG, chat
+  safety, and reports, plus a runnable end-to-end smoke script; structured error envelope
+  end-to-end; graceful degradation at every external dependency (model, SHAP, LLM, KB).
+
+KNOWN DEBTS, RANKED: the exposed-looking API key in .env.example (rotate/scrub immediately);
+missing pypdf dependency; token storage and throttling; the unauthorized /media/ report
+link; the incomplete password-reset landing route; first-page-only lists in the UI; the
+shared-bundle mutation race in predict(); and the absent deployment configuration. None of
+these undermine the architecture - all are addressable without structural change.
+
+After reading this report, every layer of the repository - from rules.json thresholds to the
+axios refresh interceptor, from the TF-IDF refit strategy to the RISK_LEVEL_ORDER trend
+arithmetic - can be opened, located, explained, and defended.
+
+END OF REPORT

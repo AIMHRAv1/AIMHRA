@@ -14,11 +14,13 @@ from patients.selectors import can_access_patient
 
 
 def _resolve_patient(request):
-    """Patients always target themselves; workers/admins pass ?patient=<id>."""
+    """Resolve the explicitly selected patient and verify access.
+
+    Every worker/admin patient-scoped request must name a patient
+    (?patient=<id> in the query string or `patient` in the body) so the
+    frontend can never accidentally assess/read the wrong record.
+    """
     user = request.user
-    if user.role == "PATIENT":
-        profile, _ = PatientProfile.objects.get_or_create(user=user)
-        return profile
     patient_id = request.query_params.get("patient") or request.data.get("patient")
     if not patient_id:
         raise ApiError("`patient` query parameter is required.", code="VALIDATION_ERROR", status_code=400)
@@ -32,12 +34,20 @@ class AssessmentListCreateView(generics.ListCreateAPIView):
     serializer_class = AssessmentSerializer
 
     def get_queryset(self):
-        patient = _resolve_patient(self.request)
-        return (
-            Assessment.objects.filter(patient=patient)
-            .select_related("prediction")
-            .prefetch_related("alerts")
-        )
+        qs = Assessment.objects.select_related("prediction", "patient").prefetch_related("alerts")
+        user = self.request.user
+        if user.role != "ADMIN":
+            from patients.selectors import patient_ids_for_healthcare_worker
+
+            ids = patient_ids_for_healthcare_worker(user)
+            qs = qs.filter(patient_id__in=ids)
+        patient = self.request.query_params.get("patient")
+        if patient:
+            profile = get_object_or_404(PatientProfile, pk=patient)
+            if not can_access_patient(user, profile):
+                raise ApiError("You are not authorized to access this patient.", code="PERMISSION_DENIED", status_code=403)
+            qs = qs.filter(patient=profile)
+        return qs
 
     def list(self, request, *args, **kwargs):
         qs = self.filter_queryset(self.get_queryset())
@@ -100,14 +110,17 @@ class AlertListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         qs = Alert.objects.select_related("patient", "assessment").all()
-        if user.role == "PATIENT":
-            profile = PatientProfile.objects.filter(user=user).first()
-            qs = qs.filter(patient=profile) if profile else Alert.objects.none()
-        elif user.role == "HEALTHCARE_WORKER":
+        if user.role == "HEALTHCARE_WORKER":
             from patients.selectors import patient_ids_for_healthcare_worker
 
             ids = patient_ids_for_healthcare_worker(user)
             qs = qs.filter(patient_id__in=ids)
+        patient = self.request.query_params.get("patient")
+        if patient:
+            profile = get_object_or_404(PatientProfile, pk=patient)
+            if not can_access_patient(user, profile):
+                raise ApiError("You are not authorized to access this patient.", code="PERMISSION_DENIED", status_code=403)
+            qs = qs.filter(patient=profile)
         status_filter = self.request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)

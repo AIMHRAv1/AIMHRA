@@ -1,9 +1,8 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { apiError } from '../../api/client'
 import { assessmentService } from '../../services/auth'
 import { ShapBars } from '../../charts'
-import { CategoryBadge, Disclaimer, ErrorState, RiskBadge } from '../../components/ui'
+import { CategoryBadge, Disclaimer, ErrorState, RiskBadge } from '../ui'
 
 const FIELDS = [
   { name: 'age', label: 'Age (years)', min: 14, max: 55, step: 1, hint: 'Plausible range 14–55' },
@@ -39,12 +38,17 @@ const initialValues = () => ({
   symptoms: ['none'], notes: '',
 })
 
-export default function Assessment() {
+export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant }) {
   const [form, setForm] = useState(initialValues)
   const [errors, setErrors] = useState({})
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+
+  const patientLabel = useMemo(
+    () => `${patient?.patient_code || ''}${patient?.full_name ? ` · ${patient.full_name}` : ''}`,
+    [patient],
+  )
 
   function set(k, v) { setForm((f) => ({ ...f, [k]: v })) }
 
@@ -85,6 +89,7 @@ export default function Assessment() {
     try {
       const payload = {
         ...form,
+        patient: patient.id,
         gestational_week: form.gestational_week === '' ? null : Number(form.gestational_week),
       }
       for (const f of FIELDS) payload[f.name] = Number(payload[f.name])
@@ -92,30 +97,32 @@ export default function Assessment() {
       setResult(data)
       setForm(initialValues())
     } catch (err) {
-      const e = apiError(err)
-      if (e.details && typeof e.details === 'object') {
-        setErrors(Object.fromEntries(Object.entries(e.details).map(([k, v]) => [k, Array.isArray(v) ? v.join(' ') : String(v)])))
+      const e2 = apiError(err)
+      if (e2.details && typeof e2.details === 'object') {
+        setErrors(Object.fromEntries(Object.entries(e2.details).map(([k, v]) => [k, Array.isArray(v) ? v.join(' ') : String(v)])))
       }
-      setError(e)
+      setError(e2)
     } finally {
       setBusy(false)
     }
   }
 
-  return (
-    <div className="page">
-      <header className="page-head">
-        <div>
-          <h1>New assessment</h1>
-          <p className="muted">Enter the measurements taken at this visit. All fields are validated by the backend.</p>
-        </div>
-      </header>
+  if (error && error.code === 'PERMISSION_DENIED') return <ErrorState error={error} />
 
+  return (
+    <div className="stack">
       {result ? (
-        <PredictionResult result={result} onAnother={() => setResult(null)} />
+        <PredictionResult
+          result={result}
+          patientLabel={patientLabel}
+          onAnother={() => setResult(null)}
+          onViewHistory={onViewHistory}
+          onAskAssistant={onAskAssistant}
+        />
       ) : (
         <form className="card" onSubmit={onSubmit} noValidate>
           {error && <div className="alert alert-error" role="alert">{error.message}</div>}
+          <h2 className="section-title">New assessment — {patientLabel || 'patient'}</h2>
           <div className="grid-2">
             <label className="field">
               <span>Visit date</span>
@@ -168,7 +175,7 @@ export default function Assessment() {
   )
 }
 
-function PredictionResult({ result, onAnother }) {
+function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAskAssistant }) {
   const probs = Object.entries(result.probabilities || {})
   return (
     <div className="stack">
@@ -188,7 +195,7 @@ function PredictionResult({ result, onAnother }) {
       <div className="card result-card">
         <div className="result-head">
           <div>
-            <div className="muted">Assessment for {result.assessment.visit_date}</div>
+            <div className="muted small">{patientLabel} · assessment on {result.assessment.visit_date}</div>
             <RiskBadge level={result.risk_level} size="lg" />
           </div>
           <div className="result-probs">
@@ -237,8 +244,8 @@ function PredictionResult({ result, onAnother }) {
       <Disclaimer text={result.disclaimer} />
       <div className="form-actions">
         <button className="btn btn-primary" onClick={onAnother}>Start another assessment</button>
-        <Link className="btn btn-secondary" to="/app/history">View history & trend</Link>
-        <Link className="btn btn-secondary" to="/app/chat">Ask the assistant</Link>
+        <button className="btn btn-secondary" onClick={onViewHistory}>View history & trend</button>
+        <button className="btn btn-secondary" onClick={onAskAssistant}>Ask the assistant</button>
       </div>
     </div>
   )

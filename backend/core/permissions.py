@@ -1,19 +1,14 @@
 """Role-based permission helpers.
 
-Roles: PATIENT, HEALTHCARE_WORKER, ADMIN (stored on accounts.User).
+Roles: HEALTHCARE_WORKER, ADMIN (stored on accounts.User).
 """
 from rest_framework.permissions import BasePermission
 
 
-class IsPatient(BasePermission):
-    message = "This endpoint is restricted to patient accounts."
-
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.role == "PATIENT")
-
-
 class IsHealthcareWorker(BasePermission):
-    message = "This endpoint is restricted to healthcare workers."
+    """Authenticated staff member: healthcare worker or administrator."""
+
+    message = "This endpoint is restricted to healthcare workers and administrators."
 
     def has_permission(self, request, view):
         return bool(

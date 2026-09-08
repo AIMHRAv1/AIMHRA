@@ -6,38 +6,36 @@ from assessments.models import Assessment
 from audit.services import log_event
 from core.exceptions import ApiError
 from core.responses import ok
-from patients.selectors import can_access_patient
+from patients.models import PatientProfile
+from patients.selectors import can_access_patient, patient_ids_for_healthcare_worker
 from reports.models import Report
 from reports.services import generate_report
 
 
 class ReportSerializer(serializers.ModelSerializer):
     patient_code = serializers.CharField(source="patient.patient_code", read_only=True)
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     assessment_id = serializers.IntegerField(read_only=True)
     filename = serializers.CharField(source="file.name", read_only=True)
 
     class Meta:
         model = Report
-        fields = ["id", "patient", "patient_code", "assessment_id", "filename", "created_at"]
+        fields = ["id", "patient", "patient_code", "patient_name", "assessment_id", "filename", "created_at"]
 
 
 class ReportListCreateView(APIView):
     def get(self, request):
         user = request.user
         qs = Report.objects.select_related("patient", "assessment").order_by("-created_at")
-        patient_id = request.query_params.get("patient")
-        if user.role == "PATIENT":
-            qs = qs.filter(patient__user=user)
-        elif user.role == "HEALTHCARE_WORKER":
-            from patients.selectors import patient_ids_for_healthcare_worker
-
+        if user.role == "HEALTHCARE_WORKER":
             ids = patient_ids_for_healthcare_worker(user)
             qs = qs.filter(patient_id__in=ids)
-            if patient_id:
-                qs = qs.filter(patient_id=patient_id)
-        else:
-            if patient_id:
-                qs = qs.filter(patient_id=patient_id)
+        patient_id = request.query_params.get("patient")
+        if patient_id:
+            profile = get_object_or_404(PatientProfile, pk=patient_id)
+            if not can_access_patient(user, profile):
+                raise ApiError("You are not authorized to access this patient.", code="PERMISSION_DENIED", status_code=403)
+            qs = qs.filter(patient=profile)
         return ok({"reports": ReportSerializer(qs[:50], many=True).data})
 
     def post(self, request):

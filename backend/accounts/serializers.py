@@ -1,5 +1,7 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from accounts.models import User
@@ -12,36 +14,6 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "role", "date_joined", "is_active"]
 
 
-class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
-    confirm_password = serializers.CharField(write_only=True, trim_whitespace=False)
-
-    class Meta:
-        model = User
-        fields = ["username", "email", "full_name", "phone", "password", "confirm_password"]
-
-    def validate_email(self, value):
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
-        return value
-
-    def validate_username(self, value):
-        if User.objects.filter(username__iexact=value).exists():
-            raise serializers.ValidationError("A user with this username already exists.")
-        return value
-
-    def validate(self, attrs):
-        if attrs["password"] != attrs.pop("confirm_password"):
-            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
-        validate_password(attrs["password"])
-        return attrs
-
-    def create(self, validated_data):
-        # Self-registration always creates a PATIENT. Healthcare-worker and
-        # admin accounts are created by an administrator.
-        return User.objects.create_user(role=User.ROLE_PATIENT, **validated_data)
-
-
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """Login serializer that also logs attempts for the audit trail."""
 
@@ -50,6 +22,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         try:
             data = super().validate(attrs)
+            if self.user.role not in (User.ROLE_HEALTHCARE_WORKER, User.ROLE_ADMIN):
+                # Legacy / unexpected roles (e.g. a pre-migration PATIENT account)
+                # must never authenticate through the application login flow.
+                audit_svc.log_event(
+                    self.context.get("request"),
+                    "LOGIN_FAILED",
+                    target_type="user",
+                    target_id=str(self.user.id),
+                    detail={"reason": "role_not_allowed"},
+                )
+                raise AuthenticationFailed("No active account found with the given credentials.")
         except Exception:
             audit_svc.log_event(
                 self.context.get("request"),
@@ -62,6 +45,36 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             self.context.get("request"), "LOGIN", target_type="user", target_id=str(self.user.id)
         )
         data["user"] = UserSerializer(self.user).data
+        return data
+
+
+class CustomTokenRefreshSerializer(TokenRefreshSerializer):
+    """Refresh flow that refuses tokens belonging to legacy/deactivated accounts.
+
+    JWT access tokens are already rejected by the authentication backend when the
+    user is inactive; this serializer closes the refresh loophole so a legacy
+    PATIENT (or deactivated) account can never mint a fresh session.
+    """
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        try:
+            from rest_framework_simplejwt.tokens import RefreshToken
+
+            refresh = RefreshToken(attrs["refresh"])
+            user_id = refresh.payload.get("user_id")
+            user = User.objects.filter(pk=user_id).first()
+            valid = (
+                user is not None
+                and user.is_active
+                and user.role in (User.ROLE_HEALTHCARE_WORKER, User.ROLE_ADMIN)
+            )
+            if not valid:
+                raise AuthenticationFailed("No active account found with the given credentials.")
+        except AuthenticationFailed:
+            raise
+        except Exception as exc:
+            raise AuthenticationFailed("Invalid token.") from exc
         return data
 
 

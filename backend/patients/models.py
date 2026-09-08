@@ -11,10 +11,34 @@ def generate_patient_code():
 
 
 class PatientProfile(models.Model):
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="patient_profile"
+    """A standalone clinical patient record.
+
+    Patients are NOT application users: they never log in, register, or hold a
+    password. The record is self-contained and owned by the healthcare worker
+    who created it (see ``created_by``) plus administrator-controlled
+    ``PatientAssignment`` entries. Demographic/medical-record fields are for
+    clinical recordkeeping only and are never fed to the ML model.
+    """
+
+    # Ownership / record metadata
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="patients_created",
+        help_text="Healthcare worker or admin who created this record.",
     )
-    patient_code = models.CharField(max_length=16, unique=True, default=generate_patient_code)
+    is_active = models.BooleanField(default=True, help_text="Unselect to archive (never delete history).")
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    # Demographics / contact
+    full_name = models.CharField(max_length=128, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    phone = models.CharField(max_length=32, blank=True, default="")
+    address = models.TextField(blank=True, default="")
+
+    # Clinical record
     date_of_birth = models.DateField(null=True, blank=True)
     blood_group = models.CharField(max_length=8, blank=True, default="")
     gestational_week_at_registration = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -23,19 +47,30 @@ class PatientProfile(models.Model):
     parity = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Births after 20 weeks' gestation.")
     medical_history_notes = models.TextField(blank=True, default="")
     allergies = models.TextField(blank=True, default="")
+    emergency_contact_name = models.CharField(max_length=128, blank=True, default="")
+    emergency_contact_phone = models.CharField(max_length=32, blank=True, default="")
+    obstetric_history_notes = models.TextField(blank=True, default="")
+    current_medications = models.TextField(blank=True, default="")
+    additional_notes = models.TextField(blank=True, default="")
+
+    patient_code = models.CharField(max_length=16, unique=True, default=generate_patient_code)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        indexes = [models.Index(fields=["patient_code"])]
+        indexes = [
+            models.Index(fields=["patient_code"]),
+            models.Index(fields=["created_by"]),
+        ]
 
     def __str__(self):
-        return self.patient_code
+        return f"{self.patient_code} ({self.full_name or 'no name'})"
 
 
 class PatientAssignment(models.Model):
-    """Explicit authorization: a healthcare worker can only access patients
-    assigned to them. Created by administrators."""
+    """Explicit authorization: a healthcare worker can access patients
+    assigned to them. Administrative sharing/reassignment mechanism for
+    patients that a worker did not create themselves."""
 
     healthcare_worker = models.ForeignKey(
         settings.AUTH_USER_MODEL,
