@@ -1,15 +1,49 @@
+# --- Django / DRF ---
 Django>=5.1,<5.2
 djangorestframework>=3.15
 djangorestframework-simplejwt>=5.3
 django-cors-headers>=4.4
 drf-spectacular>=0.27
 python-dotenv>=1.0
+dj-database-url>=2.2  # optional: DATABASE_URL (postgres) deployments
+
+# --- ML / data science ---
 numpy>=1.26
 pandas>=2.0
 scikit-learn>=1.5
 xgboost>=2.0
 shap>=0.46
 joblib>=1.3
-reportlab>=4.1
+
+# --- LLM / RAG ---
 openai>=1.40
 requests>=2.31
+qdrant-client>=1.11  # optional: VECTOR_BACKEND=qdrant (default is the local numpy store)
+
+# --- PDF / reports ---
+reportlab>=4.1
+pypdf>=4.3
+pypdfium2>=4.30
+pymupdf>=1.24
+
+# --- OCR ---
+pytesseract>=0.3.10
+opencv-python-headless>=4.9
+Pillow>=10.0
+# deps pip would otherwise miss (pytesseract imports packaging;
+# pandas/easyocr import python-dateutil)
+packaging>=21
+python-dateutil>=2.8
+# Optional second OCR engine + recognition fine-tuning (manage.py ocr_train).
+easyocr>=1.7
+# torch/torchvision are imported directly by the EasyOCR engine and
+# backend/ocr/training (easyocr pulls them in anyway, listed explicitly).
+# CPU wheels install by default; for the CUDA build (RTX 3050) use
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+torch>=2.0
+torchvision>=0.15
+PyYAML>=6.0  # OCR training config
+
+# --- Visualization notebook (backend/visualization.ipynb) ---
+matplotlib>=3.8
+seaborn>=0.13

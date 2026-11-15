@@ -71,7 +71,7 @@ export default function AdminUsers() {
           <h1>Users</h1>
           <p className="muted">Create staff accounts and manage patient assignments.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>＋ New user</button>
+        <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>+ New user</button>
       </header>
 
       {notice && <div className="alert alert-info">{notice}</div>}
@@ -104,7 +104,7 @@ export default function AdminUsers() {
             {users.map((u) => (
               <tr key={u.id} className={!u.is_active ? 'row-muted' : ''}>
                 <td>{u.username}</td><td>{u.email}</td><td>{u.role}</td>
-                <td>{u.is_active ? '✓' : '✗'}</td>
+                <td>{u.is_active ? 'Yes' : 'No'}</td>
                 <td>{new Date(u.date_joined).toLocaleDateString()}</td>
                 <td><button className="btn btn-small btn-secondary" onClick={() => toggleActive(u)}>{u.is_active ? 'Deactivate' : 'Reactivate'}</button></td>
               </tr>

@@ -51,7 +51,7 @@ export default function PatientList() {
         <div className="quick-actions">
           <input className="search" placeholder="Search code / name / phone / email…" value={search}
                  onChange={(e) => setSearch(e.target.value)} aria-label="Search patients" />
-          <Link className="btn btn-primary" to="/app/patients/new">＋ Add Patient</Link>
+          <Link className="btn btn-primary" to="/app/patients/new">+ Add Patient</Link>
         </div>
       </header>
 
@@ -59,7 +59,7 @@ export default function PatientList() {
         <EmptyState
           title={search ? 'No matching patients' : 'No patients yet'}
           hint={search ? 'Try a different search term.' : 'Add a patient to start their maternal health record.'}
-          action={!search && <Link className="btn btn-primary" to="/app/patients/new">＋ Add Patient</Link>}
+          action={!search && <Link className="btn btn-primary" to="/app/patients/new">+ Add Patient</Link>}
         />
       ) : (
         <div className="card">

@@ -26,6 +26,17 @@ class Assessment(models.Model):
     hba1c = models.FloatField()
     fasting_glucose = models.FloatField()
     # Fixed vocabulary of self-reported symptoms (rule-engine input).
+    DATA_SOURCE_MANUAL = "manual"
+    DATA_SOURCE_OCR_ASSISTED = "ocr_assisted"
+    DATA_SOURCE_CHOICES = (
+        (DATA_SOURCE_MANUAL, "Entered manually"),
+        (DATA_SOURCE_OCR_ASSISTED, "Pre-filled from a scanned report card (reviewed by the operator)"),
+    )
+
+    data_source = models.CharField(
+        max_length=16, choices=DATA_SOURCE_CHOICES, default=DATA_SOURCE_MANUAL,
+        help_text="How the values were entered. OCR only pre-fills; the operator confirms.",
+    )
     symptoms = models.JSONField(default=list, blank=True)
     notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)

@@ -133,7 +133,7 @@ Patient ID,Name,Age,Body Temperature(F) ,Heart rate(bpm),Systolic Blood Pressure
 232,Abhikanksha,20,97.3,104,144,84,21,34,7.5,high risk
 233,Kaashwi,21,98.8,85,161,84,20.2,36,4.6,high risk
 234,Paatala,22,98.6,83,154,84,20.1,42,5.1,mid risk
-235,Kaarunya,250,98.6,76,126,85,24.1,42,5.9,low risk
+235,Kaarunya,25,98.6,76,126,85,24.1,42,5.9,low risk
 236,Shilna,23,98.6,78,135,84,21,36,4.5,low risk
 237,Nahar,33,98.6,72,143,83,19,45,4,mid risk
 238,Dhanalakshmi,33,98.8,110,148,98,21.8,44,6,mid risk

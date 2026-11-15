@@ -83,8 +83,17 @@ FEATURE_LABELS = {
 # 3.5-8.9, consistent with mmol/L). The model is trained on the values as
 # provided, and the assessment form documents the observed ranges. This is a
 # known data-quality limitation, recorded rather than silently "fixed".
+# validate_dataset enforces these magnitudes so a future unit-"corrected" CSV
+# cannot silently invalidate the trained model.
+DOCUMENTED_GLUCOSE_RANGES = {
+    "hba1c": (20.0, 60.0),          # observed 30-50 in this dataset's units
+    "fasting_glucose": (2.0, 20.0),  # observed 3.5-8.9 in this dataset's units
+}
+
 DATASET_NOTES = [
-    "Glucose column units are inconsistent with their headers; values used as-is.",
+    "Glucose column units are inconsistent with their headers; values used as-is and enforced by validate_dataset.",
     "Implausible training rows (outside PLAUSIBILITY_RANGES) are dropped and counted in the inspection report.",
     "Exact duplicate feature+label rows are dropped before splitting to avoid optimistic test estimates.",
+    "Near-duplicate clusters (all 8 features equal when rounded) are kept within one split; 91 groups / 195 rows found, 11 with conflicting labels.",
+    "Label provenance: the `Status` target is supplied by the source dataset with undocumented derivation; see ML_DATA_CARD.md. Internal metrics are NOT clinical validation.",
 ]

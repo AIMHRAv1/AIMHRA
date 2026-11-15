@@ -43,6 +43,25 @@ def vectorizer_ready():
     return _VECTORIZER is not None
 
 
+def ensure_corpus():
+    """Lazily fit the local TF-IDF vectorizer from the stored chunk corpus.
+
+    The vectorizer fitted here is identical to the one used at index time
+    (same texts, same parameters), so stored chunk embeddings stay compatible.
+    This keeps retrieval working after a server restart without re-indexing.
+    Returns True when a fitted vectorizer is ready for queries."""
+    if get_backend() != "local" or _VECTORIZER is not None:
+        return _VECTORIZER is not None
+    try:
+        from kb.models import DocumentChunk
+
+        fit_corpus(list(DocumentChunk.objects.values_list("text", flat=True)))
+    except Exception:
+        logger.exception("Could not fit local embedding corpus from stored chunks")
+        return False
+    return _VECTORIZER is not None
+
+
 def embed_texts(texts):
     """Return (n, d) float array of embeddings for the given texts."""
     if not texts:

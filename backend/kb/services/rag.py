@@ -14,6 +14,9 @@ def retrieve_context(question, top_k=TOP_K):
     from kb.services import embeddings, store
 
     try:
+        # Lazily refit the local TF-IDF corpus after a restart so retrieval
+        # works without an explicit re-index.
+        embeddings.ensure_corpus()
         query_vector = embeddings.embed_texts([question])[0]
     except Exception:
         logger.exception("Query embedding failed")

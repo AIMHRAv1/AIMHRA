@@ -1,16 +1,19 @@
 """Chat pipeline (requirements #20-23, #54):
 
     message -> emergency rule engine
-                   |-- triggered -> escalation answer (LLM bypassed entirely)
-                   '-- clear -----> patient context -> RAG retrieval -> LLM
-                                                                       '-- unavailable -> safe fallback
+                   |-- triggered -> warning FIRST + while-you-arrange-care advice
+                   '-- clear -----> patient context -> RAG retrieval -> local LLM
+                                                                       '-- unavailable -> extractive fallback
+
+Emergency warnings always come first and are never softened, but the answer
+still includes practical advice on what to do while arranging emergency care.
 """
 import logging
 
 from assessments.rules import evaluate as rules_evaluate
 from assessments.rules.keywords import detect_symptoms
 from audit.services import log_event
-from chat.llm import FALLBACK_NO_LLM, generate_answer, llm_configured
+from chat.llm import FALLBACK_NO_LLM, KB_INTRO, compose_extractive, generate_answer, looks_like_refusal
 from chat.models import ChatMessage, ChatSession
 from kb.services import rag
 
@@ -74,19 +77,30 @@ def respond(session, user_message_text, request=None):
 
     if rules_out["escalate"]:
         triggered_ids = ", ".join(t["id"] for t in rules_out["triggered"])
-        answer = (
+        warning = (
             f"{rules_out['message']}\n\n"
             f"Warning signs detected in your message: {triggered_ids} "
             f"(rule set {rules_out['rules_version']}).\n\n"
-            "Please do not wait to see if it improves. If you are alone, call someone now. "
+            "Please do not wait to see if it improves. Go to the nearest hospital or "
+            "doctor now, or call emergency services. If you are alone, call someone now. "
             "This chat assistant cannot provide emergency care."
         )
+        advice, advice_sources = _escalation_advice(user_message_text, detected)
+        if advice:
+            answer = (
+                f"{warning}\n\n"
+                "While you arrange emergency care, the trusted knowledge base indicates "
+                f"the following:\n\n{advice}\n\n"
+                "This advice does not replace emergency care — seek help immediately."
+            )
+        else:
+            answer = warning
         message = ChatMessage.objects.create(
             session=session,
             role=ChatMessage.ROLE_ASSISTANT,
             content=answer,
             escalation=rules_out,
-            sources=[],
+            sources=advice_sources,
             generation_mode="escalation",
         )
         log_event(
@@ -113,14 +127,22 @@ def respond(session, user_message_text, request=None):
         user_message_text, context_chunks=context["chunks"] if context else None,
         history=history, patient_context=patient_context,
     )
+    # A blanket model refusal is treated as a generation failure and replaced
+    # with the extractive knowledge-base answer.
+    if answer is not None and looks_like_refusal(answer):
+        answer = None
 
     if answer is None:
         if context and context["chunks"]:
-            excerpts = "\n\n---\n\n".join(
-                f"[{c['document_title']} — chunk {c['chunk_index']}] {c['text'][:500]}"
-                for c in context["chunks"]
-            )
-            answer = f"{FALLBACK_NO_LLM}\n\nRelevant knowledge-base excerpts:\n\n{excerpts}"
+            extractive = compose_extractive(user_message_text, context["chunks"], intro=KB_INTRO)
+            if extractive:
+                answer = extractive
+            else:
+                excerpts = "\n\n---\n\n".join(
+                    f"[{c['document_title']} — chunk {c['chunk_index']}] {c['text'][:500]}"
+                    for c in context["chunks"]
+                )
+                answer = f"{FALLBACK_NO_LLM}\n\nRelevant knowledge-base excerpts:\n\n{excerpts}"
             mode = "rag_only_fallback"
         else:
             answer = (
@@ -150,6 +172,41 @@ def respond(session, user_message_text, request=None):
     log_event(request, "CHAT_ACCESS", target_type="chat_session", target_id=str(session.id),
               detail={"mode": mode, "sources": len(sources)})
     return _serialize(message)
+
+
+def _escalation_advice(message_text, detected):
+    """Practical 'while you arrange emergency care' advice for an escalated
+    message. Returns (advice_text, sources) — (None, []) when nothing useful
+    can be grounded. The emergency warning itself is never generated here; it
+    always precedes this text in the answer."""
+    symptom_labels = ", ".join(detected) if detected else message_text[:200]
+    question = (
+        f"What immediate practical steps can be taken while arranging emergency medical "
+        f"care for: {symptom_labels}?"
+    )
+    context = rag.retrieve_context(question)
+    chunks = context["chunks"] if context else []
+    if not chunks:
+        return None, []
+
+    answer, _mode = generate_answer(question, context_chunks=chunks)
+    if answer is not None and looks_like_refusal(answer):
+        answer = None
+    if not answer:
+        answer = compose_extractive(question, chunks, intro=KB_INTRO)
+    if not answer:
+        return None, []
+
+    sources = [
+        {
+            "document_title": c["document_title"],
+            "source_url": c["source_url"],
+            "chunk_index": c["chunk_index"],
+            "score": c["score"],
+        }
+        for c in chunks
+    ]
+    return answer, sources
 
 
 def _serialize(message):

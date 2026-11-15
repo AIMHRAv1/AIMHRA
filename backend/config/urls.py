@@ -17,6 +17,8 @@ urlpatterns = [
     path("api/models/", include("mlcore.urls")),
     path("api/rag/", include("kb.urls")),
     path("api/chat/", include("chat.urls")),
+    path("api/ocr/", include("ocr.urls")),
+    path("api/advisory/", include("advisory.urls")),
     path("api/reports/", include("reports.urls")),
     path("api/audit/", include("audit.urls")),
     path("api/admin/", include("patients.admin_urls")),

@@ -48,6 +48,11 @@ def generate_report(assessment, generated_by):
     story = []
     story.append(Paragraph("Maternal Health Risk Assessment Report", h1))
     story.append(Paragraph(f"Generated: {timezone.localtime().strftime('%Y-%m-%d %H:%M')} — AIMHRA decision-support system", small))
+    if getattr(assessment, "data_source", "manual") == "ocr_assisted":
+        story.append(Paragraph(
+            "Data source: OCR-assisted — values were pre-filled from a scanned report card and verified by the operator.",
+            small,
+        ))
     story.append(Spacer(1, 8))
 
     risk_color = colors.Color(*RISK_COLORS.get(prediction.risk_level, (0, 0, 0)))
@@ -116,6 +121,49 @@ def generate_report(assessment, generated_by):
             story.append(Paragraph(f"• [{alert.category}] {alert.message}", body))
     else:
         story.append(Paragraph("No warning rules triggered for this assessment.", body))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Guideline references (traceability)", h2))
+    references = (prediction.explanation or {}).get("references")
+    if references is None:
+        from assessments.references import attach_document_versions, guideline_references
+
+        prediction_out = {
+            "risk_level": prediction.risk_level,
+            "probability": prediction.probability,
+            "probabilities": prediction.probabilities,
+            "model": {"name": prediction.model_name, "version": prediction.model_version},
+            "explanation": prediction.explanation,
+        }
+        try:
+            from assessments.rules import evaluate as rules_evaluate
+
+            rules_out = rules_evaluate(assessment.feature_values(), assessment.symptoms)
+            references, _warnings = guideline_references(rules_out, prediction_out)
+            references = attach_document_versions(references)
+        except Exception:
+            logger.exception("Reference retrieval for report failed; continuing without")
+            references = []
+    if references:
+        for ref in references:
+            locator = f"chunk {ref['chunk_index']}" + (f", section '{ref['section']}'" if ref.get("section") else "")
+            url = f" — {ref['source_url']}" if ref.get("source_url") else ""
+            story.append(Paragraph(
+                f"• [{ref['topic_type']}] {ref['topic_label']} — {ref['document_title']} "
+                f"({locator}){url} · document sha256 {ref.get('document_sha256', '')[:12]}",
+                body,
+            ))
+        story.append(Paragraph(
+            "References are passages retrieved from the indexed knowledge base "
+            "(TF-IDF similarity). They are provided for traceability and do not "
+            "constitute clinical advice or an endorsement of the model output.",
+            small,
+        ))
+    else:
+        story.append(Paragraph(
+            "No guideline references were available for this assessment (knowledge base "
+            "empty or no sufficiently similar passage).", body,
+        ))
     story.append(Spacer(1, 10))
 
     story.append(Paragraph("Disclaimer", h2))

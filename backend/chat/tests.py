@@ -2,7 +2,7 @@
 safe fallback and access control."""
 from accounts.models import User
 from chat.models import ChatMessage, ChatSession
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from patients.models import PatientProfile
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -13,6 +13,7 @@ KB_TEXT = (
 )
 
 
+@override_settings(LLM_BASE_URL="")  # force the offline fallback path in tests
 class ChatPipelineTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -80,21 +81,41 @@ class ChatPipelineTests(TestCase):
         )
         self.assertEqual(r.status_code, 403)
 
-    def test_emergency_message_bypasses_llm(self):
+    EMERGENCY_KB_TEXT = (
+        "Heavy vaginal bleeding in pregnancy is an emergency. While arranging emergency "
+        "care, the patient should lie on her side, stay calm, avoid drinking or eating, "
+        "and have someone stay with her. Note the amount of bleeding and any clots to "
+        "report to the medical team. Do not take any medication unless instructed by a "
+        "clinician. Transport to the nearest hospital as quickly and smoothly as possible."
+    )
+
+    def test_emergency_message_warns_then_advises(self):
+        self.client.post(
+            "/api/rag/documents/",
+            {"title": "Bleeding Emergency Guidance", "content_text": self.EMERGENCY_KB_TEXT},
+            content_type="application/json",
+            **self.admin_auth,
+        )
         reply = self._send("I am having convulsions and vaginal bleeding")
         self.assertTrue(reply["escalation"]["escalate"])
         self.assertEqual(reply["generation_mode"], "escalation")
-        self.assertIn("emergency", reply["content"].lower())
+        content = reply["content"].lower()
+        # The warning must come first and must never be softened.
+        self.assertIn("do not wait", content)
+        self.assertIn("nearest hospital", content)
+        self.assertLess(content.find("do not wait"), content.find("while you arrange emergency care"))
+        # Practical advice on what to do follows the warning.
+        self.assertIn("while you arrange emergency care", content)
         from audit.models import AuditLog
 
         self.assertTrue(AuditLog.objects.filter(action="RULE_ESCALATION", target_type="chat_message").exists())
 
     def test_non_emergency_message_gets_safe_answer_without_llm(self):
-        # LLM_API_KEY is unset in tests -> deterministic fallback path.
+        # No local model server in tests -> deterministic extractive fallback path.
         reply = self._send("What can help with morning sickness?")
         self.assertFalse(reply["escalation"].get("escalate", False))
         self.assertIn("healthcare professional", reply["content"])
-        self.assertIn(reply["generation_mode"], ("no_llm_configured", "rag_only_fallback", "llm"))
+        self.assertIn(reply["generation_mode"], ("no_llm_configured", "rag_only_fallback", "local_llm"))
 
     def test_rag_sources_attached_when_kb_has_content(self):
         self.client.post(
@@ -104,7 +125,7 @@ class ChatPipelineTests(TestCase):
             **self.admin_auth,
         )
         reply = self._send("How do I deal with morning sickness?")
-        if reply["generation_mode"] in ("rag_only_fallback", "llm"):
+        if reply["generation_mode"] in ("rag_only_fallback", "local_llm"):
             self.assertTrue(any(s["document_title"] == "Nausea Guidance" for s in reply["sources"]))
             self.assertTrue(all("score" in s for s in reply["sources"]))
 

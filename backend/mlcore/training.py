@@ -13,13 +13,21 @@ from datetime import datetime, timezone
 
 import joblib
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 
 from mlcore import evaluation as ev
 from mlcore.constants import FEATURES, PLAUSIBILITY_RANGES, RISK_LEVELS, RISK_LEVEL_ORDER
-from mlcore.dataset import clean_dataset, dataset_md5, feature_matrix, load_raw_dataset, validate_dataset
+from mlcore.dataset import (
+    clean_dataset,
+    dataset_md5,
+    feature_matrix,
+    grouped_split_indices,
+    load_raw_dataset,
+    near_duplicate_groups,
+    validate_dataset,
+)
 from mlcore.preprocessing import Preprocessor
 
 logger = logging.getLogger(__name__)
@@ -65,7 +73,7 @@ TRAIN_CONFIG = {
         "RandomForest": {"n_estimators": 400, "min_samples_leaf": 2, "class_weight": "balanced_subsample"},
         "XGBoost": {"n_estimators": 400, "learning_rate": 0.08, "max_depth": 6, "subsample": 0.9, "colsample_bytree": 0.8},
     },
-    "evaluation": "held-out test split only; high-risk recall prioritized for model selection",
+    "evaluation": "validation split for model SELECTION; held-out test split for all reported metrics (with bootstrap 95% CIs); high-risk recall prioritized",
 }
 
 
@@ -89,15 +97,33 @@ def train_all(dataset_path, artifacts_dir, quick=False):
     # probabilities always align with the canonical class list (both models).
     y_enc = np.array([RISK_LEVEL_ORDER[v] for v in y])
 
-    # Stratified 70/15/15 split. Validation is used only for training-time
-    # sanity checks; all reported metrics come from the test split.
-    X_trainval, X_test, y_trainval, y_test = train_test_split(
-        X, y_enc, test_size=0.15, stratify=y_enc, random_state=RANDOM_STATE
-    )
+    # Near-duplicate grouping (investigation result, ML_DATA_CARD.md): 91
+    # groups / 195 rows share all 8 features when rounded; 11 groups have
+    # conflicting labels. Group-aware splitting keeps every near-duplicate
+    # cluster inside ONE split so near-identical rows cannot straddle
+    # train/test and inflate metrics, with per-class row targets kept
+    # proportional (approximate stratification).
+    groups = near_duplicate_groups(df)
+
+    # Stratified 70/15/15 split, group-aware. Validation is used for model
+    # SELECTION (criterion applied by the training command); all headline
+    # metrics come from the untouched test split.
+    trainval_idx, test_idx = grouped_split_indices(y_enc, groups, test_size=0.15, seed=RANDOM_STATE)
+    X_trainval, X_test = X[trainval_idx], X[test_idx]
+    y_trainval, y_test = y_enc[trainval_idx], y_enc[test_idx]
+    g_trainval = groups[trainval_idx]
     relative_val = 0.15 / 0.85
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_trainval, y_trainval, test_size=relative_val, stratify=y_trainval, random_state=RANDOM_STATE
-    )
+    train_idx, val_idx = grouped_split_indices(y_trainval, g_trainval, test_size=relative_val, seed=RANDOM_STATE)
+    X_train, X_val = X_trainval[train_idx], X_trainval[val_idx]
+    y_train, y_val = y_trainval[train_idx], y_trainval[val_idx]
+    split_report = {
+        "strategy": "group_aware_stratified",
+        "grouping": "all 8 features equal when rounded to whole numbers",
+        "near_duplicate_groups": int(len(np.unique(groups))),
+        "rows_in_multi_row_groups": int(pd.Series(groups).value_counts().loc[lambda s: s > 1].sum()),
+        "groups_shared_across_splits": int(len(set(g_trainval) & set(groups[test_idx]))),
+    }
+    logger.info("Split: %s", split_report)
 
     preprocessor = Preprocessor().fit(X_train)
     X_train_p = preprocessor.transform(X_train)
@@ -123,6 +149,15 @@ def train_all(dataset_path, artifacts_dir, quick=False):
         y_pred = decode[model.predict(X_test_p)]
         y_proba = model.predict_proba(X_test_p)
         test_metrics = ev.evaluate_classifier(y_test_lbl, y_pred, y_proba)
+        # Uncertainty on the headline metrics: percentile bootstrap over the
+        # test split (resampled with replacement, fixed seed).
+        test_metrics["f1_macro_ci95"] = ev.bootstrap_ci(
+            y_test_lbl, y_pred, lambda yt, yp: ev.f1_score(yt, yp, average="macro", zero_division=0)
+        )
+        test_metrics["high_risk_recall_ci95"] = ev.bootstrap_ci(
+            y_test_lbl, y_pred,
+            lambda yt, yp: ev.recall_score(yt, yp, labels=["high risk"], average="macro", zero_division=0),
+        )
         train_seconds = round(time.time() - started, 2)
 
         artifact_path = artifacts_dir / f"{name.lower()}_{'quick' if quick else 'full'}.joblib"
@@ -162,6 +197,7 @@ def train_all(dataset_path, artifacts_dir, quick=False):
             "validation": int(X_val.shape[0]),
             "test": int(X_test.shape[0]),
         },
+        "split_report": split_report,
         "train_config": TRAIN_CONFIG,
         "plausibility_ranges": {k: list(v) for k, v in PLAUSIBILITY_RANGES.items()},
         "results": results,

@@ -57,6 +57,21 @@ export const chatService = {
   deleteSession: (id) => api.delete(`/chat/sessions/${id}/`),
 }
 
+export const advisoryService = {
+  generate: (assessmentId) => api.post('/advisory/', { assessment: assessmentId }),
+  forAssessment: (assessmentId) => api.get('/advisory/detail/', { params: { assessment: assessmentId } }),
+}
+
+export const ocrService = {
+  extract: (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/ocr/extract/', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  // Field names + changed flag only — values never leave the browser.
+  feedback: (entries) => api.post('/ocr/feedback/', { entries }),
+}
+
 export const kbService = {
   documents: () => api.get('/rag/documents/'),
   upload: (form) => api.post('/rag/documents/', form),

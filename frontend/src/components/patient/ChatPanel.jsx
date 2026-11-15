@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { chatService } from '../../services/auth'
 import { apiError } from '../../api/client'
-import { CategoryBadge, Disclaimer, EmptyState, ErrorState, Loading } from '../ui'
+import { CategoryBadge, Disclaimer, EmptyState, ErrorState, Loading, MarkdownLite } from '../ui'
 
 export default function ChatPanel({ patientId }) {
   const [sessions, setSessions] = useState([])
@@ -92,14 +92,14 @@ export default function ChatPanel({ patientId }) {
   return (
     <div className="chat-layout">
       <aside className="chat-sessions">
-        <button className="btn btn-secondary btn-block" onClick={newSession} style={{ marginBottom: 8 }}>＋ New conversation</button>
+        <button className="btn btn-secondary btn-block" onClick={newSession} style={{ marginBottom: 8 }}>+ New conversation</button>
         {sessions.length === 0 && <p className="muted small">No conversations for this patient yet.</p>}
         {sessions.map((s) => (
           <div key={s.id} className="chat-session-row">
             <button className={`chat-session${s.id === activeId ? ' active' : ''}`} onClick={() => openSession(s.id)}>
               {s.title || 'Conversation'}
             </button>
-            <button className="link small" onClick={() => removeSession(s.id)} title="Delete conversation">✕</button>
+            <button className="link small" onClick={() => removeSession(s.id)} title="Delete conversation">×</button>
           </div>
         ))}
       </aside>
@@ -114,11 +114,11 @@ export default function ChatPanel({ patientId }) {
                 {m.escalation?.escalate && (
                   <div className="msg-escalation"><CategoryBadge category={m.escalation.category} /> Rule-based escalation — seek care now</div>
                 )}
-                <div className="msg-content">{m.content}</div>
+                <div className="msg-content"><MarkdownLite text={m.content} /></div>
                 {m.sources?.length > 0 && (
                   <div className="msg-sources">
                     <button className="link" onClick={() => setShowSources((s) => ({ ...s, [i]: !s[i] }))}>
-                      📚 Knowledge-base sources ({m.sources.length}) {showSources[i] ? '▾' : '▸'}
+                      Knowledge-base sources ({m.sources.length})
                     </button>
                     {showSources[i] && (
                       <ul>
@@ -131,9 +131,6 @@ export default function ChatPanel({ patientId }) {
                       </ul>
                     )}
                   </div>
-                )}
-                {m.role === 'ASSISTANT' && m.generation_mode && m.generation_mode !== 'escalation' && (
-                  <div className="msg-mode muted small">mode: {m.generation_mode}</div>
                 )}
               </div>
             ))}

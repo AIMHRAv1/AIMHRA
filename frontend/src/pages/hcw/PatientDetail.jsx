@@ -7,19 +7,25 @@ import { CategoryBadge, Disclaimer, EmptyState, ErrorState, Loading, RiskBadge, 
 import AssessmentPanel from '../../components/patient/AssessmentPanel'
 import HistoryPanel from '../../components/patient/HistoryPanel'
 import ChatPanel from '../../components/patient/ChatPanel'
+import AdvisoryPanel from '../../components/patient/AdvisoryPanel'
 import ProfilePanel from '../../components/patient/ProfilePanel'
 import AlertsPanel from '../../components/patient/AlertsPanel'
 import ReportsPanel from '../../components/patient/ReportsPanel'
+import {
+  IconBell, IconFileText, IconHeartPulse, IconLayoutDashboard, IconMessageSquare,
+  IconOctagonAlert, IconPlusCircle, IconTrendingUp, IconUser,
+} from '../../components/icons'
 import { downloadReport } from '../../utils/reportDownload'
 
 const TABS = [
-  { key: 'overview', label: 'Overview', icon: '▦' },
-  { key: 'info', label: 'Patient Information', icon: '👤' },
-  { key: 'assessment', label: 'New Assessment', icon: '＋' },
-  { key: 'history', label: 'History & Trend', icon: '📈' },
-  { key: 'alerts', label: 'Alerts', icon: '🔔' },
-  { key: 'chat', label: 'AI Assistant', icon: '💬' },
-  { key: 'reports', label: 'Reports', icon: '📄' },
+  { key: 'overview', label: 'Overview', Icon: IconLayoutDashboard },
+  { key: 'info', label: 'Patient Information', Icon: IconUser },
+  { key: 'assessment', label: 'New Assessment', Icon: IconPlusCircle, action: true },
+  { key: 'history', label: 'History & Trend', Icon: IconTrendingUp },
+  { key: 'alerts', label: 'Alerts', Icon: IconBell },
+  { key: 'chat', label: 'AI Assistant', Icon: IconMessageSquare },
+  { key: 'advisory', label: 'Care Advisory', Icon: IconHeartPulse },
+  { key: 'reports', label: 'Reports', Icon: IconFileText },
 ]
 
 function computeAge(dateOfBirth) {
@@ -79,6 +85,10 @@ export default function PatientDetail() {
   }, [])
 
   const age = useMemo(() => computeAge(patient?.date_of_birth), [patient])
+  const openAlertCount = useMemo(
+    () => alerts.filter((a) => a.status === 'OPEN').length,
+    [alerts],
+  )
 
   async function generateReport(assessmentId) {
     setBusy(true)
@@ -131,17 +141,30 @@ export default function PatientDetail() {
               {currentConfidence != null && <span className="muted"> · confidence {Math.round(currentConfidence * 100)}%</span>}
             </span>
           ) : <span className="muted small">No assessment yet</span>}
-          <button className="btn btn-primary" onClick={() => setTab('assessment')}>＋ New Assessment</button>
+          <button className="btn btn-primary" onClick={() => setTab('assessment')}>+ New Assessment</button>
           <button className="btn btn-secondary" onClick={() => setTab('info')}>Edit Patient</button>
         </div>
       </header>
 
-      <nav className="tabs" aria-label="Patient workspace">
-        {TABS.map((t) => (
-          <button key={t.key} className={`tab${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
-            <span aria-hidden="true">{t.icon}</span> {t.label}
-          </button>
-        ))}
+      <nav className="tabs" role="tablist" aria-label="Patient workspace">
+        {TABS.map(({ key, label, Icon, action }) => {
+          const active = tab === key
+          const badge = key === 'alerts' ? openAlertCount : null
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className={`tab${active ? ' active' : ''}${action ? ' tab-action' : ''}`}
+              onClick={() => setTab(key)}
+            >
+              <Icon size={16} />
+              <span className="tab-label">{label}</span>
+              {badge > 0 && <span className="tab-badge" aria-label={`${badge} unread`}>{badge}</span>}
+            </button>
+          )
+        })}
       </nav>
 
       <div className="tab-panel">
@@ -165,11 +188,13 @@ export default function PatientDetail() {
             patient={patient}
             onViewHistory={() => setTab('history')}
             onAskAssistant={() => setTab('chat')}
+            onViewAdvisory={() => setTab('advisory')}
           />
         )}
         {tab === 'history' && <HistoryPanel patientId={id} />}
         {tab === 'alerts' && <AlertsPanel patientId={id} showStatus="ALL" />}
         {tab === 'chat' && <ChatPanel patientId={id} />}
+        {tab === 'advisory' && <AdvisoryPanel patientId={id} />}
         {tab === 'reports' && <ReportsPanel patientId={id} />}
       </div>
     </div>
@@ -207,7 +232,7 @@ function OverviewTab({
 
       {emergency.length > 0 && (
         <div className="alert alert-emergency" role="alert">
-          <strong>⛔ {emergency.length} emergency alert{emergency.length > 1 ? 's' : ''}</strong>
+          <strong><IconOctagonAlert size={14} /> {emergency.length} emergency alert{emergency.length > 1 ? 's' : ''}</strong>
           <p>{emergency[0].message}</p>
         </div>
       )}
@@ -228,7 +253,7 @@ function OverviewTab({
           <EmptyState
             title="No assessments yet"
             hint="Perform the first maternal health risk assessment to start tracking."
-            action={<button className="btn btn-primary" onClick={onNewAssessment}>＋ New Assessment</button>}
+            action={<button className="btn btn-primary" onClick={onNewAssessment}>+ New Assessment</button>}
           />
         )}
       </div>

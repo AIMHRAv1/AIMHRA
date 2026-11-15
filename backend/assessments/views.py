@@ -4,8 +4,9 @@ from rest_framework.views import APIView
 
 from assessments.models import Alert, Assessment, Prediction
 from assessments.serializers import AlertAckSerializer, AlertSerializer, AssessmentSerializer
+from assessments.rules.trend_engine import evaluate_trends
 from assessments.services import DISCLAIMER, create_assessment, prediction_series
-from assessments.trends import compute_trend
+from assessments.trends import compare_measurements, compute_trend, measurement_series
 from core.exceptions import ApiError
 from core.responses import ok
 from core.permissions import IsHealthcareWorker
@@ -85,7 +86,8 @@ class RiskHistoryView(APIView):
 
 
 class RiskTrendView(APIView):
-    """Trend analytics over the prediction series."""
+    """Trend analytics over the prediction series plus previous-vs-latest
+    actual measurement comparisons (deterministic arithmetic, not ML)."""
 
     def get(self, request):
         patient = _resolve_patient(request)
@@ -95,10 +97,30 @@ class RiskTrendView(APIView):
              "risk_level": h["risk_level"], "gestational_week": h.get("gestational_week")}
             for h in history
         ]
+        series = measurement_series(patient)
+        comparisons = compare_measurements(series)
+        trend_rules_out = evaluate_trends(comparisons)
         return ok(
             {
                 "trend": compute_trend(history),
                 "series": history,
+                # Actual measurements across visit dates + deltas vs the
+                # previous visit. Plain calculations; no thresholds applied
+                # until the trend ruleset is clinically reviewed.
+                "measurements": {
+                    "visits": series["visits"],
+                    "features": series["features"],
+                    "comparisons": comparisons,
+                    "note": "deterministic previous-vs-latest arithmetic over stored assessments — not machine learning",
+                },
+                "measurement_rules": {
+                    "active": trend_rules_out["active"],
+                    "category": trend_rules_out["category"],
+                    "escalate": trend_rules_out["escalate"],
+                    "rules_version": trend_rules_out["rules_version"],
+                    "message": trend_rules_out["message"],
+                    "triggered": trend_rules_out["triggered"],
+                },
                 "disclaimer": "Trends describe stored assessments only. The system does not predict future risk.",
             }
         )

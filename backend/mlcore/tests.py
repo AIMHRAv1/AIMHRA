@@ -1,11 +1,20 @@
 """ML-layer tests: preprocessing, feature selection, leakage, training,
 persistence, prediction shape, labels and explainability."""
 import numpy as np
+import pandas as pd
 from django.conf import settings
 from django.test import TestCase
 
 from mlcore.constants import FEATURES, RISK_LEVELS, SAFE_FEATURES, LEAKAGE_FEATURES, UNUSED_FEATURES
-from mlcore.dataset import clean_dataset, feature_matrix, load_raw_dataset, validate_dataset
+from mlcore.dataset import (
+    clean_dataset,
+    feature_matrix,
+    grouped_split_indices,
+    load_raw_dataset,
+    near_duplicate_groups,
+    validate_dataset,
+)
+from mlcore.evaluation import bootstrap_ci, calibration_metrics
 from mlcore.models import ModelVersion
 from mlcore.preprocessing import Preprocessor
 from mlcore.training import train_all
@@ -43,6 +52,82 @@ class DatasetTests(TestCase):
         self.assertIn("Patient ID", UNUSED_FEATURES)
         self.assertEqual(LEAKAGE_FEATURES, [])
 
+    def test_glucose_units_match_documented_ranges(self):
+        # Unit contract: the production model trains on the dataset's own
+        # magnitudes; validate_dataset must report them as consistent.
+        df = load_raw_dataset(DATASET)
+        report = validate_dataset(df, RISK_LEVELS)
+        self.assertTrue(report["unit_check"]["hba1c"]["consistent"])
+        self.assertTrue(report["unit_check"]["fasting_glucose"]["consistent"])
+
+    def test_unit_check_rejects_mgdl_magnitude_flip(self):
+        # A future CSV corrected to true mg/dL magnitudes must FAIL loudly,
+        # not silently invalidate the deployed model.
+        df = load_raw_dataset(DATASET).copy()
+        df.loc[df.index[:100], "hba1c"] = 11.0  # % scale instead of mmol/mol
+        with self.assertRaises(ValueError):
+            validate_dataset(df, RISK_LEVELS)
+
+    def test_near_duplicate_groups_are_deterministic_and_sound(self):
+        df = load_raw_dataset(DATASET)
+        g1 = near_duplicate_groups(df)
+        g2 = near_duplicate_groups(df)
+        np.testing.assert_array_equal(g1, g2)
+        # Two rows identical on all 8 features share a group.
+        a, b = df.iloc[0], df.iloc[1]
+        twin = a.copy()
+        twin["risk_level"] = b["risk_level"]  # label ignored for grouping
+        df2 = pd.concat([df, twin.to_frame().T], ignore_index=True)
+        for f in FEATURES:
+            df2[f] = pd.to_numeric(df2[f])
+        g3 = near_duplicate_groups(df2)
+        self.assertEqual(g3[0], g3[-1])
+
+    def test_grouped_split_keeps_groups_whole_and_is_reproducible(self):
+        y = np.array([0, 0, 1, 1, 0, 1, 0, 1, 0, 1])
+        groups = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4])
+        tr1, te1 = grouped_split_indices(y, groups, test_size=0.4, seed=7)
+        tr2, te2 = grouped_split_indices(y, groups, test_size=0.4, seed=7)
+        np.testing.assert_array_equal(tr1, tr2)
+        np.testing.assert_array_equal(te1, te2)
+        self.assertEqual(len(tr1) + len(te1), len(y))
+        self.assertEqual(set(tr1) & set(te1), set())
+        # Every group lands entirely on one side.
+        for g in np.unique(groups):
+            rows = np.where(groups == g)[0]
+            same_side = all((r in set(te1)) for r in rows) or all((r not in set(te1)) for r in rows)
+            self.assertTrue(same_side, f"group {g} straddled the split")
+
+
+class CalibrationAndCITests(TestCase):
+    def test_calibration_perfect_predictions_score_zero_brier(self):
+        y_true = ["low risk", "mid risk", "high risk"]
+        y_proba = np.array([
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ])
+        m = calibration_metrics(y_true, y_proba)
+        self.assertEqual(m["brier_multiclass"], 0.0)
+        self.assertEqual(m["expected_calibration_error"], 0.0)
+
+    def test_calibration_overconfident_predictions_produce_nonzero_ece(self):
+        y_true = ["low risk", "high risk"]
+        y_proba = np.array([
+            [0.95, 0.03, 0.02],  # confident low risk, correct
+            [0.95, 0.03, 0.02],  # confident low risk, WRONG
+        ])
+        m = calibration_metrics(y_true, y_proba)
+        self.assertGreater(m["expected_calibration_error"], 0.3)
+        self.assertGreater(m["brier_multiclass"], 0.5)
+
+    def test_bootstrap_ci_on_constant_metric_is_degenerate(self):
+        y_true = ["low risk"] * 10
+        y_pred = ["low risk"] * 10
+        ci = bootstrap_ci(y_true, y_pred, lambda yt, yp: 1.0, n_resamples=50)
+        self.assertEqual(ci["low"], 1.0)
+        self.assertEqual(ci["high"], 1.0)
+
 
 class PreprocessingTests(TestCase):
     def test_fit_transform_and_missing_imputation(self):
@@ -72,6 +157,7 @@ class TrainingAndPredictionTests(TestCase):
         import pathlib
 
         outcome = train_all(DATASET, settings.ML_ARTIFACTS_DIR, quick=True)
+        cls.outcome = outcome
         best = max(outcome["results"], key=lambda r: r["test_metrics"]["f1_macro"])
         for r in outcome["results"]:
             ModelVersion.objects.create(
@@ -84,6 +170,23 @@ class TrainingAndPredictionTests(TestCase):
                 artifact_path=str(r["artifact_path"]),
                 status="PRODUCTION" if r is best else "CANDIDATE",
             )
+
+    def test_training_split_is_group_aware(self):
+        report = self.outcome["split_report"]
+        self.assertGreater(report["near_duplicate_groups"], 0)
+        self.assertGreater(report["rows_in_multi_row_groups"], 0)
+        # Near-duplicate clusters never straddle the test boundary.
+        self.assertEqual(report["groups_shared_across_splits"], 0)
+
+    def test_test_metrics_carry_calibration_and_ci(self):
+        for r in self.outcome["results"]:
+            m = r["test_metrics"]
+            self.assertIn("calibration", m)
+            self.assertTrue(0.0 <= m["calibration"]["brier_multiclass"] <= 3.0)
+            self.assertTrue(0.0 <= m["calibration"]["expected_calibration_error"] <= 1.0)
+            self.assertIn("f1_macro_ci95", m)
+            self.assertLessEqual(m["f1_macro_ci95"]["low"], m["f1_macro"] + 1e-9)
+            self.assertGreaterEqual(m["f1_macro_ci95"]["high"], m["f1_macro"] - 1e-9)
 
     def test_production_model_exists(self):
         from mlcore.registry import get_production_bundle

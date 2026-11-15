@@ -71,7 +71,7 @@ export default function AdminKnowledge() {
           <h1>Knowledge base (RAG)</h1>
           <p className="muted">Trusted documents the assistant retrieves from. Every answer cites these sources.</p>
         </div>
-        <button className="btn btn-secondary" disabled={busy} onClick={reindex}>↻ Re-index all</button>
+        <button className="btn btn-secondary" disabled={busy} onClick={reindex}>Re-index all</button>
       </header>
 
       {notice && <div className="alert alert-info">{notice}</div>}

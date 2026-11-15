@@ -40,6 +40,8 @@ export default function HistoryPanel({ patientId }) {
 
   const series = data.series ?? []
   const trend = data.trend
+  const measurements = data.measurements
+  const comparisons = measurements?.comparisons ?? []
 
   return (
     <div className="stack">
@@ -57,6 +59,62 @@ export default function HistoryPanel({ patientId }) {
             </p>
             <p className="muted small">Trends describe stored assessments only — the system does not predict future risk.</p>
           </div>
+
+          {measurements && measurements.visits?.length > 0 && (
+            <div className="card">
+              <h2 className="section-title">Measurements across visits</h2>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Measurement</th>
+                      {measurements.visits.map((v) => (
+                        <th key={v.assessment_id}>{v.visit_date}</th>
+                      ))}
+                      <th>Change vs previous</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {measurements.features.map((feature) => {
+                      const cmp = comparisons.find((c) => c.feature === feature)
+                      return (
+                        <tr key={feature}>
+                          <td>{cmp?.label ?? feature}</td>
+                          {measurements.visits.map((v) => (
+                            <td key={v.assessment_id}>{v[feature]}</td>
+                          ))}
+                          <td>
+                            {cmp ? (
+                              <>
+                                {cmp.delta > 0 ? '+' : ''}{cmp.delta ?? '—'}
+                                {cmp.percent_change != null && (
+                                  <span className="muted small"> ({cmp.percent_change > 0 ? '+' : ''}{cmp.percent_change}%)</span>
+                                )}
+                                <span className="muted small"> {cmp.direction}</span>
+                              </>
+                            ) : <span className="muted small">first visit</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted small">{measurements.note}.</p>
+              {data.measurement_rules && !data.measurement_rules.active && (
+                <p className="muted small">
+                  Measurement-change alerts are configured but not yet clinically reviewed, so no trend alerts are generated.
+                </p>
+              )}
+              {data.measurement_rules?.triggered?.length > 0 && (
+                <ul className="rule-list">
+                  {data.measurement_rules.triggered.map((t) => (
+                    <li key={t.id}><code>{t.id}</code> {t.description} — {t.feature} changed by {t.delta}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="card">
             <h2 className="section-title">All assessments</h2>

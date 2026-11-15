@@ -46,7 +46,7 @@ export default function HcwDashboard() {
           <p className="muted">Your patients, their current risk and open rule-based alerts.</p>
         </div>
         <div className="quick-actions">
-          <Link className="btn btn-primary" to="/app/patients/new">＋ Add Patient</Link>
+          <Link className="btn btn-primary" to="/app/patients/new">+ Add Patient</Link>
           <Link className="btn btn-secondary" to="/app/patients">All patients</Link>
           <Link className="btn btn-secondary" to="/app/alerts">Risk alerts</Link>
           <Link className="btn btn-secondary" to="/app/reports">Reports</Link>
@@ -106,7 +106,7 @@ export default function HcwDashboard() {
           <h2 className="section-title">Recently added patients</h2>
           {recentlyAdded.length === 0 ? (
             <EmptyState title="No patients yet" hint="Add your first patient record."
-                        action={<Link className="btn btn-primary" to="/app/patients/new">＋ Add Patient</Link>} />
+                        action={<Link className="btn btn-primary" to="/app/patients/new">+ Add Patient</Link>} />
           ) : (
             <ul className="alert-list">
               {recentlyAdded.map((p) => (

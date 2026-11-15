@@ -42,7 +42,10 @@ class Command(BaseCommand):
             return
 
         criterion = settings.MODEL_SELECTION_CRITERION
-        best = max(outcome["results"], key=lambda r: ev.selection_score(r["test_metrics"], criterion))
+        # Selection-leakage fix: the production model is chosen on VALIDATION
+        # metrics only. The test split stays independent — reported once per
+        # model for documentation, never used to pick the winner.
+        best = max(outcome["results"], key=lambda r: ev.selection_score(r["validation_metrics"], criterion))
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
 
         with transaction.atomic():
@@ -61,6 +64,7 @@ class Command(BaseCommand):
                     training_config={
                         **outcome["train_config"],
                         "split_sizes": outcome["split_sizes"],
+                        "split_report": outcome.get("split_report"),
                         "cleaning_stats": outcome["cleaning_stats"],
                         "train_seconds": r["train_seconds"],
                     },
@@ -83,9 +87,15 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"Registered {row.name} {row.version} [{row.status}] "
+                        f"val_f1_macro={r['validation_metrics']['f1_macro']:.4f} "
+                        f"val_high_risk_recall={r['validation_metrics']['high_risk_recall']:.4f} | "
                         f"test_f1_macro={r['test_metrics']['f1_macro']:.4f} "
+                        f"(95% CI {r['test_metrics']['f1_macro_ci95']['low']:.4f}-"
+                        f"{r['test_metrics']['f1_macro_ci95']['high']:.4f}) "
                         f"test_high_risk_recall={r['test_metrics']['high_risk_recall']:.4f}"
                     )
                 )
 
-        self.stdout.write(f"Production model selected by criterion '{criterion}': {best['name']}")
+        self.stdout.write(
+            f"Production model selected on VALIDATION metrics by criterion '{criterion}': {best['name']}"
+        )

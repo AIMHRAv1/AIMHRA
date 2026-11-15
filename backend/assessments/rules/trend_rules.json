@@ -1,0 +1,16 @@
+{
+  "version": "trend-v1",
+  "review_status": "PENDING_CLINICAL_REVIEW",
+  "review_note": "Measurement-change rules. The engine refuses to load this ruleset until review_status is set to 'CLINICALLY_REVIEWED' by qualified clinical stakeholders. Threshold fields (delta/percent_delta) are intentionally left EMPTY: they must be filled in during clinical review. No default clinical thresholds are shipped. Trend evaluation is a deterministic arithmetic check on stored measurements — it is NOT machine learning and produces monitoring prompts, never diagnoses.",
+  "categories": {
+    "NORMAL": "No measurement-change rule triggered",
+    "ATTENTION": "A notable measurement change was detected; mention it at the next contact",
+    "HIGH_CONCERN": "A clinically reviewed measurement change threshold was crossed; contact a healthcare professional promptly"
+  },
+  "messages": {
+    "ATTENTION": "A notable change in a stored measurement was detected between visits. Please mention it at the next contact.",
+    "HIGH_CONCERN": "A reviewed measurement-change threshold was crossed between visits. Please contact a healthcare professional promptly.",
+    "NORMAL": "No measurement-change rules triggered."
+  },
+  "rules": []
+}

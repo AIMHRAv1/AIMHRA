@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { apiError } from '../../api/client'
-import { assessmentService } from '../../services/auth'
+import { assessmentService, ocrService } from '../../services/auth'
 import { ShapBars } from '../../charts'
-import { CategoryBadge, Disclaimer, ErrorState, RiskBadge } from '../ui'
+import { CategoryBadge, Disclaimer, EmptyState, ErrorState, Loading, RiskBadge } from '../ui'
+import { IconAlertTriangle, IconOctagonAlert } from '../icons'
+import { AdvisoryCard } from './AdvisoryPanel'
 
 const FIELDS = [
   { name: 'age', label: 'Age (years)', min: 14, max: 55, step: 1, hint: 'Plausible range 14–55' },
@@ -38,12 +40,29 @@ const initialValues = () => ({
   symptoms: ['none'], notes: '',
 })
 
-export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant }) {
+const emptyScan = () => ({ file: null, preview: null, busy: false, error: null, result: null })
+
+// OCR confidence badge: green = valid and confident, amber = review, red = invalid/low.
+function scanBadgeClass(entry) {
+  if (!entry) return null
+  const conf = typeof entry.confidence === 'number' ? entry.confidence : 0
+  if (entry.valid === false || conf < 0.6) return 'field-badge red'
+  // Uncertain fields are never green: warnings, suggestions or disagreements
+  // force at least amber.
+  if (entry.warning || entry.suggestion || entry.candidates) return 'field-badge amber'
+  if (conf >= 0.85) return 'field-badge green'
+  return 'field-badge amber'
+}
+
+export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant, onViewAdvisory }) {
   const [form, setForm] = useState(initialValues)
   const [errors, setErrors] = useState({})
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [mode, setMode] = useState('manual') // 'manual' (default) | 'scan'
+  const [scan, setScan] = useState(emptyScan)
+  const [checkedFields, setCheckedFields] = useState({})
 
   const patientLabel = useMemo(
     () => `${patient?.patient_code || ''}${patient?.full_name ? ` · ${patient.full_name}` : ''}`,
@@ -51,6 +70,55 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
   )
 
   function set(k, v) { setForm((f) => ({ ...f, [k]: v })) }
+
+  // --- OCR scan mode: pre-fill only; the operator reviews and confirms. ---
+  function pickScanFile(file) {
+    if (!file) return
+    if (scan.preview) URL.revokeObjectURL(scan.preview)
+    setScan({ ...emptyScan(), file, preview: URL.createObjectURL(file) })
+  }
+
+  async function extractScan() {
+    if (!scan.file) return
+    setScan((s) => ({ ...s, busy: true, error: null }))
+    try {
+      const data = await ocrService.extract(scan.file)
+      const applied = applyScan(data)
+      setScan((s) => ({ ...s, busy: false, result: data, applied }))
+    } catch (e) {
+      setScan((s) => ({ ...s, busy: false, error: apiError(e) }))
+    }
+  }
+
+  function applyScan(data) {
+    // Fill ONLY fields the OCR actually found; missing fields stay blank.
+    // Returns the applied snapshot (for edit tracking — names only).
+    const applied = {}
+    setForm((f) => {
+      const next = { ...f }
+      const fields = data.fields || {}
+      for (const [name, entry] of Object.entries(fields)) {
+        const { value } = entry
+        if (value === null || value === undefined || value === '') continue
+        if (name === 'visit_date') next.visit_date = String(value)
+        else if (name === 'gestational_week') next.gestational_week = String(Math.round(Number(value)))
+        else if (FIELDS.some((fl) => fl.name === name)) next[name] = String(value)
+        applied[name] = next[name]
+      }
+      return next
+    })
+    return applied
+  }
+
+  function applySuggestion(field, value) {
+    // Explicit operator action — suggestions are never auto-applied.
+    set(field, String(value))
+  }
+
+  function resetScan() {
+    if (scan.preview) URL.revokeObjectURL(scan.preview)
+    setScan(emptyScan())
+  }
 
   function toggleSymptom(code) {
     setForm((f) => {
@@ -81,21 +149,53 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
     return Object.keys(errs).length === 0
   }
 
+  function uncheckedUncertain() {
+    // Amber/red OCR fields the operator has not explicitly confirmed.
+    if (mode !== 'scan' || !scan.result) return []
+    const out = []
+    for (const [name, entry] of Object.entries(scan.result.fields || {})) {
+      const uncertain = entry.valid === false || entry.warning || entry.suggestion || entry.candidates
+      if (uncertain && !checkedFields[name]) out.push(name)
+    }
+    return out
+  }
+
   async function onSubmit(e) {
     e.preventDefault()
     setError(null)
     if (!validate()) return
+    const unchecked = uncheckedUncertain()
+    if (unchecked.length > 0) {
+      const okGo = window.confirm(
+        `These scanned values are marked uncertain and were not confirmed: ${unchecked.join(', ')}. ` +
+        'Submit anyway?'
+      )
+      if (!okGo) return
+    }
     setBusy(true)
     try {
       const payload = {
         ...form,
         patient: patient.id,
         gestational_week: form.gestational_week === '' ? null : Number(form.gestational_week),
+        data_source: mode === 'scan' && scan.result ? 'ocr_assisted' : 'manual',
       }
       for (const f of FIELDS) payload[f.name] = Number(payload[f.name])
       const data = await assessmentService.create(payload)
       setResult(data)
       setForm(initialValues())
+      setCheckedFields({})
+      // Edit tracking for OCR quality measurement: field names + changed
+      // flag only — values never leave the browser.
+      if (mode === 'scan' && scan.result) {
+        const entries = Object.keys(scan.result.fields || {}).map((name) => ({
+          field: name,
+          changed: String(form[name] ?? '') !== String(scan.applied?.[name] ?? ''),
+        }))
+        if (entries.length) ocrService.feedback(entries).catch(() => {})
+      }
+      resetScan()
+      setMode('manual')
     } catch (err) {
       const e2 = apiError(err)
       if (e2.details && typeof e2.details === 'object') {
@@ -118,76 +218,260 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
           onAnother={() => setResult(null)}
           onViewHistory={onViewHistory}
           onAskAssistant={onAskAssistant}
+          onViewAdvisory={onViewAdvisory}
         />
       ) : (
-        <form className="card" onSubmit={onSubmit} noValidate>
-          {error && <div className="alert alert-error" role="alert">{error.message}</div>}
-          <h2 className="section-title">New assessment — {patientLabel || 'patient'}</h2>
-          <div className="grid-2">
-            <label className="field">
-              <span>Visit date</span>
-              <input type="date" max={new Date().toISOString().slice(0, 10)} value={form.visit_date}
-                     onChange={(e) => set('visit_date', e.target.value)} required />
-              {errors.visit_date && <em className="field-error">{errors.visit_date}</em>}
-            </label>
-            <label className="field">
-              <span>Gestational week (optional)</span>
-              <input type="number" min={1} max={45} value={form.gestational_week}
-                     onChange={(e) => set('gestational_week', e.target.value)} placeholder="e.g. 24" />
-              {errors.gestational_week && <em className="field-error">{errors.gestational_week}</em>}
-            </label>
+        <div className="stack">
+          <div className="mode-toggle" role="tablist" aria-label="Entry mode">
+            <button type="button" className={`chip${mode === 'manual' ? ' selected' : ''}`}
+                    aria-selected={mode === 'manual'} onClick={() => setMode('manual')}>
+              Enter manually
+            </button>
+            <button type="button" className={`chip${mode === 'scan' ? ' selected' : ''}`}
+                    aria-selected={mode === 'scan'} onClick={() => setMode('scan')}>
+              Scan report card
+            </button>
           </div>
 
-          <h2 className="section-title">Measurements</h2>
-          <div className="grid-2">
-            {FIELDS.map((f) => (
-              <label className="field" key={f.name}>
-                <span>{f.label}</span>
-                <input type="number" inputMode="decimal" min={f.min} max={f.max} step={f.step}
-                       value={form[f.name]} onChange={(e) => set(f.name, e.target.value)} required />
-                {f.hint && <small className="field-hint">{f.hint}</small>}
-                {errors[f.name] && <em className="field-error">{errors[f.name]}</em>}
+          {mode === 'scan' && !scan.result && (
+            <ScanPane scan={scan} onPick={pickScanFile} onExtract={extractScan} onReset={resetScan} />
+          )}
+          {mode === 'scan' && scan.result && (
+            <div className="alert alert-info" role="status">
+              Auto-filled from scan. Please verify every value before submitting.
+            </div>
+          )}
+
+          <div className={mode === 'scan' && scan.result ? 'scan-layout' : ''}>
+            <form className="card" onSubmit={onSubmit} noValidate>
+              {error && <div className="alert alert-error" role="alert">{error.message}</div>}
+              <h2 className="section-title">New assessment — {patientLabel || 'patient'}</h2>
+              <div className="grid-2">
+                <label className="field">
+                  <span>Visit date {scanBadge(scan.result, 'visit_date')}</span>
+                  <input type="date" max={new Date().toISOString().slice(0, 10)} value={form.visit_date}
+                         onChange={(e) => set('visit_date', e.target.value)} required />
+                  {scanWarn(scan.result, 'visit_date', applySuggestion)}
+                  {errors.visit_date && <em className="field-error">{errors.visit_date}</em>}
+                  {scanCropRow('visit_date', scan.result, checkedFields, setCheckedFields)}
+                </label>
+                <label className="field">
+                  <span>Gestational week (optional) {scanBadge(scan.result, 'gestational_week')}</span>
+                  <input type="number" min={1} max={45} value={form.gestational_week}
+                         onChange={(e) => set('gestational_week', e.target.value)} placeholder="e.g. 24" />
+                  {scanWarn(scan.result, 'gestational_week', applySuggestion)}
+                  {errors.gestational_week && <em className="field-error">{errors.gestational_week}</em>}
+                  {scanCropRow('gestational_week', scan.result, checkedFields, setCheckedFields)}
+                </label>
+              </div>
+
+              <h2 className="section-title">Measurements</h2>
+              <div className="grid-2">
+                {FIELDS.map((f) => {
+                  const crop = scan.result?.fields?.[f.name]?.crop_image
+                  return (
+                    <label className="field" key={f.name}>
+                      <span>{f.label} {scanBadge(scan.result, f.name)}</span>
+                      <input type="number" inputMode="decimal" min={f.min} max={f.max} step={f.step}
+                             value={form[f.name]} onChange={(e) => set(f.name, e.target.value)} required />
+                      {f.hint && <small className="field-hint">{f.hint}</small>}
+                      {scanWarn(scan.result, f.name, applySuggestion)}
+                      {errors[f.name] && <em className="field-error">{errors[f.name]}</em>}
+                      {crop && (
+                        <span className="field-crop-row">
+                          <img src={crop} alt={`Scanned region for ${f.label}`} className="field-crop" />
+                          <label className="small checked-label">
+                            <input type="checkbox" checked={!!checkedFields[f.name]}
+                                   onChange={(e) => setCheckedFields((s) => ({ ...s, [f.name]: e.target.checked }))} />
+                            I checked this
+                          </label>
+                        </span>
+                      )}
+                    </label>
+                  )
+                })}
+              </div>
+
+              <h2 className="section-title">Symptoms since the last visit</h2>
+              <div className="symptom-grid" role="group" aria-label="Symptoms">
+                {SYMPTOMS.map(([code, label]) => (
+                  <label key={code} className={`symptom${form.symptoms.includes(code) ? ' selected' : ''}`}>
+                    <input type="checkbox" checked={form.symptoms.includes(code)} onChange={() => toggleSymptom(code)} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+
+              <label className="field">
+                <span>Notes (optional)</span>
+                <textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
               </label>
-            ))}
-          </div>
 
-          <h2 className="section-title">Symptoms since the last visit</h2>
-          <div className="symptom-grid" role="group" aria-label="Symptoms">
-            {SYMPTOMS.map(([code, label]) => (
-              <label key={code} className={`symptom${form.symptoms.includes(code) ? ' selected' : ''}`}>
-                <input type="checkbox" checked={form.symptoms.includes(code)} onChange={() => toggleSymptom(code)} />
-                {label}
-              </label>
-            ))}
-          </div>
+              <div className="form-actions">
+                <button className="btn btn-primary" disabled={busy}>{busy ? 'Analyzing…' : 'Submit assessment'}</button>
+              </div>
+            </form>
 
-          <label className="field">
-            <span>Notes (optional)</span>
-            <textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
-          </label>
-
-          <div className="form-actions">
-            <button className="btn btn-primary" disabled={busy}>{busy ? 'Analyzing…' : 'Submit assessment'}</button>
+            {mode === 'scan' && scan.result && <ScanSidebar scan={scan} onRescan={resetScan} />}
           </div>
-        </form>
+        </div>
       )}
     </div>
   )
 }
 
-function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAskAssistant }) {
+function scanBadge(result, field) {
+  const entry = result?.fields?.[field]
+  const cls = scanBadgeClass(entry)
+  if (!cls) return null
+  return <span className={cls}>{entry.valid === false ? 'check' : `${Math.round((entry.confidence || 0) * 100)}%`}</span>
+}
+
+function scanCropRow(field, result, checkedFields, setCheckedFields) {
+  const crop = result?.fields?.[field]?.crop_image
+  if (!crop) return null
+  return (
+    <span className="field-crop-row">
+      <img src={crop} alt={`Scanned region for ${field}`} className="field-crop" />
+      <label className="small checked-label">
+        <input type="checkbox" checked={!!checkedFields[field]}
+               onChange={(e) => setCheckedFields((s) => ({ ...s, [field]: e.target.checked }))} />
+        I checked this
+      </label>
+    </span>
+  )
+}
+
+function scanWarn(result, field, onApplySuggestion) {
+  const entry = result?.fields?.[field]
+  if (!entry) return null
+  return (
+    <>
+      {entry.warning && <small className="field-warning">{entry.warning}</small>}
+      {entry.suggestion?.value != null && onApplySuggestion && (
+        <small className="field-warning">
+          Suggestion: <b>{entry.suggestion.value}</b>{' '}
+          <button type="button" className="link" onClick={() => onApplySuggestion(field, entry.suggestion.value)}>
+            Use {entry.suggestion.value}
+          </button>
+        </small>
+      )}
+      {entry.candidates?.length > 0 && (
+        <small className="field-warning">
+          Candidates: {entry.candidates.map((c) => `${c.value} (${c.source})`).join(' | ')}
+        </small>
+      )}
+    </>
+  )
+}
+
+function ScanPane({ scan, onPick, onExtract, onReset }) {
+  return (
+    <div className="card">
+      <h2 className="section-title">Scan report card</h2>
+      <p className="muted small">
+        Take a photo of the printed lab report (or upload a JPG/PNG/PDF, max 5 MB). The values are
+        read automatically and placed into the form below — you review and confirm before anything is submitted.
+      </p>
+      <label className="field">
+        <span>Report card photo or file</span>
+        <input type="file" accept="image/*,application/pdf" capture="environment"
+               onChange={(e) => onPick(e.target.files?.[0])} disabled={scan.busy} />
+      </label>
+      {scan.preview && scan.file?.type !== 'application/pdf' && (
+        <div className="scan-preview"><img src={scan.preview} alt="Report card preview" /></div>
+      )}
+      {scan.file?.type === 'application/pdf' && (
+        <p className="muted small">PDF selected: {scan.file.name}</p>
+      )}
+      {scan.busy && <Loading label="Reading the report card…" />}
+      {scan.error && <ErrorState error={scan.error} onRetry={() => onPick(scan.file)} />}
+      {!scan.file && !scan.busy && !scan.error && (
+        <EmptyState title="No file selected" hint="Choose or capture a report card photo to pre-fill the assessment." />
+      )}
+      <div className="form-actions">
+        <button type="button" className="btn btn-primary" disabled={!scan.file || scan.busy} onClick={onExtract}>
+          {scan.busy ? 'Reading…' : 'Extract values'}
+        </button>
+        {scan.file && !scan.busy && (
+          <button type="button" className="btn btn-secondary" onClick={onReset}>Clear</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ScanSidebar({ scan, onRescan }) {
+  const result = scan.result
+  const missing = result?.missing ?? []
+  const warnings = result?.warnings ?? []
+  return (
+    <aside className="scan-sidebar">
+      {scan.preview && (
+        <div className="card">
+          <h2 className="section-title">Scanned image</h2>
+          <div className="scan-preview"><img src={scan.preview} alt="Scanned report card" /></div>
+        </div>
+      )}
+      <div className="card">
+        <h2 className="section-title">Extraction details</h2>
+        <p className="muted small">
+          Engine: {result?.engine_info?.engine}
+          {result?.engine_info?.stages?.length ? ` (+ ${result.engine_info.stages.join(' + ')})` : ''} ·
+          {' '}{result?.engine_info?.duration_ms ?? '—'} ms
+        </p>
+        <b className="small">Extracted fields (provenance):</b>
+        <ul className="rule-list">
+          {Object.entries(result?.fields || {}).map(([name, entry]) => (
+            <li key={name}>
+              <code>{name}</code> {entry.valid === false ? '⚠ verify' : 'ok'} · {entry.source} ·{' '}
+              {Math.round((entry.confidence || 0) * 100)}%
+              {entry.candidates?.length > 0 && (
+                <div className="muted small">
+                  candidates: {entry.candidates.map((c) => `${c.value} (${c.source})`).join(' | ')}
+                </div>
+              )}
+              {entry.also_found_by?.length > 0 && (
+                <div className="muted small">also found by: {entry.also_found_by.join(', ')}</div>
+              )}
+            </li>
+          ))}
+        </ul>
+        {missing.length > 0 && (
+          <>
+            <b className="small">Not found — left blank:</b>
+            <p className="muted small">{missing.join(', ')}</p>
+          </>
+        )}
+        {warnings.length > 0 && (
+          <>
+            <b className="small">Warnings:</b>
+            <ul className="rule-list">
+              {warnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+          </>
+        )}
+        <button type="button" className="btn btn-small btn-secondary" onClick={onRescan}>
+          Scan a different file
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAskAssistant, onViewAdvisory }) {
   const probs = Object.entries(result.probabilities || {})
   return (
     <div className="stack">
       {result.rules?.category === 'EMERGENCY' && (
         <div className="alert alert-emergency" role="alert">
-          <strong>⛔ EMERGENCY — rule {result.rules.rules_version}</strong>
+          <strong><IconOctagonAlert size={14} /> EMERGENCY — rule {result.rules.rules_version}</strong>
           <p>{result.rules.message}</p>
         </div>
       )}
       {result.rules?.category === 'HIGH_CONCERN' && (
         <div className="alert alert-warning" role="alert">
-          <strong>⚠ High concern — rule {result.rules.rules_version}</strong>
+          <strong><IconAlertTriangle size={14} /> High concern — rule {result.rules.rules_version}</strong>
           <p>{result.rules.message}</p>
         </div>
       )}
@@ -241,10 +525,64 @@ function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAs
         ) : <p className="muted">No warning rules triggered.</p>}
       </div>
 
+      <div className="card">
+        <h2 className="section-title">Decision support & references</h2>
+        {result.decision_support ? (
+          <div className="stack">
+            <div>
+              <p className="muted small" style={{ marginBottom: 4 }}>
+                <b>Model estimate</b> — {result.decision_support.ml.risk_level}, confidence{' '}
+                {Math.round(result.decision_support.ml.probability * 100)}% ({result.decision_support.ml.model?.name})
+              </p>
+              {result.decision_support.ml.top_factors?.length > 0 && (
+                <ul className="rule-list">
+                  {result.decision_support.ml.top_factors.map((f) => (
+                    <li key={f.feature}>
+                      {f.label} — {f.direction} the model's estimate (impact {f.impact >= 0 ? '+' : ''}{f.impact});{' '}
+                      <span className="muted">{f.note}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <p className="muted small" style={{ marginBottom: 4 }}>
+                <b>Rule checks</b> — {result.decision_support.rules.category} (rule set {result.decision_support.rules.rules_version}) ·{' '}
+                <span className="muted">{result.decision_support.rules.note}</span>
+              </p>
+            </div>
+            {result.decision_support.reference_warnings?.length > 0 && (
+              <p className="muted small">{result.decision_support.reference_warnings.join(' ')}</p>
+            )}
+            {result.decision_support.references?.length > 0 && (
+              <div>
+                <p className="muted small" style={{ marginBottom: 4 }}>
+                  <b>Guideline references</b> — retrieved from the indexed knowledge base; provided for traceability, not as clinical advice.
+                </p>
+                <ul className="rule-list">
+                  {result.decision_support.references.map((r, i) => (
+                    <li key={i}>
+                      <code>{r.topic_id}</code> {r.topic_label} — {r.document_title}
+                      {r.section ? ` · ${r.section}` : ''} · chunk {r.chunk_index}
+                      {r.source_url ? <> · <a href={r.source_url} target="_blank" rel="noreferrer">source</a></> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="muted">Decision support details are not available for this assessment.</p>
+        )}
+      </div>
+
+      <AdvisoryCard assessmentId={result.assessment?.id} category={result.rules?.category} autoGenerate />
+
       <Disclaimer text={result.disclaimer} />
       <div className="form-actions">
         <button className="btn btn-primary" onClick={onAnother}>Start another assessment</button>
         <button className="btn btn-secondary" onClick={onViewHistory}>View history & trend</button>
+        <button className="btn btn-secondary" onClick={onViewAdvisory}>Open care advisory</button>
         <button className="btn btn-secondary" onClick={onAskAssistant}>Ask the assistant</button>
       </div>
     </div>

@@ -9,8 +9,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from assessments.models import Alert, Assessment, Prediction
+from assessments.references import attach_document_versions, guideline_references
 from assessments.rules import evaluate as rules_evaluate
-from assessments.trends import compute_trend
+from assessments.rules.trend_engine import evaluate_trends
+from assessments.trends import compare_measurements, compute_trend, measurement_series
 from audit.services import log_event
 from mlcore.exceptions import ModelUnavailableError
 from mlcore.registry import predict as model_predict
@@ -94,7 +96,52 @@ def create_assessment(patient, data, request=None):
     history = prediction_series(patient)
     trend = compute_trend(history)
 
-    return build_response(assessment, prediction, rules_out, alerts, trend)
+    # Measurement-trend checks: deterministic arithmetic over stored visits,
+    # evaluated by the separately-configured trend rules. No alert can be
+    # produced while the trend ruleset is not clinically reviewed.
+    series = measurement_series(patient)
+    comparisons = compare_measurements(series)
+    trend_rules_out = evaluate_trends(comparisons)
+    if trend_rules_out["active"] and trend_rules_out["category"] != "NORMAL" and trend_rules_out["triggered"]:
+        with transaction.atomic():
+            trend_alert = Alert.objects.create(
+                assessment=assessment,
+                patient=patient,
+                category=trend_rules_out["category"],
+                rule_id=",".join(t["id"] for t in trend_rules_out["triggered"][:5]),
+                rule_description="; ".join(t["description"] for t in trend_rules_out["triggered"][:5]),
+                message=trend_rules_out["message"],
+                rules_version=trend_rules_out["rules_version"],
+            )
+            alerts.append(trend_alert)
+        log_event(
+            request, "RULE_ESCALATION", target_type="assessment", target_id=str(assessment.id),
+            detail={
+                "kind": "measurement_trend",
+                "category": trend_rules_out["category"],
+                "rules": [t["id"] for t in trend_rules_out["triggered"]],
+            },
+        )
+
+    response = build_response(assessment, prediction, rules_out, alerts, trend)
+    # Persist the citations that were shown for this assessment so they stay
+    # traceable even if the knowledge base changes later (additive JSONField
+    # key — no migration).
+    prediction.explanation = {**prediction.explanation, "references": response["decision_support"]["references"]}
+    prediction.save(update_fields=["explanation"])
+    response["measurement_trend"] = {
+        "note": "deterministic rule calculations over stored measurements — not machine learning",
+        "comparisons": comparisons,
+        "rules": {
+            "active": trend_rules_out["active"],
+            "category": trend_rules_out["category"],
+            "escalate": trend_rules_out["escalate"],
+            "rules_version": trend_rules_out["rules_version"],
+            "message": trend_rules_out["message"],
+            "triggered": trend_rules_out["triggered"],
+        },
+    }
+    return response
 
 
 def prediction_series(patient):
@@ -118,6 +165,15 @@ def prediction_series(patient):
 
 
 def build_response(assessment, prediction, rules_out, alerts, trend):
+    prediction_out = {
+        "risk_level": prediction.risk_level,
+        "probability": prediction.probability,
+        "probabilities": prediction.probabilities,
+        "model": {"name": prediction.model_name, "version": prediction.model_version},
+        "explanation": prediction.explanation,
+    }
+    references, reference_warnings = guideline_references(rules_out, prediction_out)
+    references = attach_document_versions(references)
     return {
         "assessment": {
             "id": assessment.id,
@@ -142,5 +198,37 @@ def build_response(assessment, prediction, rules_out, alerts, trend):
             {"id": a.id, "category": a.category, "message": a.message, "status": a.status} for a in alerts
         ],
         "trend": trend,
+        # Structured decision support: the ML estimate, the deterministic
+        # rule outcome and the retrieved guideline passages, clearly
+        # separated and traceable. References are retrieved citations, not
+        # clinical endorsements; SHAP factors are model attributions, not
+        # medical causes.
+        "decision_support": {
+            "ml": {
+                "risk_level": prediction.risk_level,
+                "probability": prediction.probability,
+                "probabilities": prediction.probabilities,
+                "model": {"name": prediction.model_name, "version": prediction.model_version},
+                "top_factors": [
+                    {
+                        "feature": f["feature"],
+                        "label": f["label"],
+                        "impact": f["impact"],
+                        "direction": f["direction"],
+                        "note": "contribution to the model's prediction (SHAP), not a medical cause",
+                    }
+                    for f in ((prediction.explanation or {}).get("features") or [])[:3]
+                ],
+            },
+            "rules": {
+                "category": rules_out["category"],
+                "escalate": rules_out["escalate"],
+                "triggered": rules_out["triggered"],
+                "rules_version": rules_out["rules_version"],
+                "note": "deterministic, versioned rule evaluation — not machine learning",
+            },
+            "references": references,
+            "reference_warnings": reference_warnings,
+        },
         "disclaimer": DISCLAIMER,
     }

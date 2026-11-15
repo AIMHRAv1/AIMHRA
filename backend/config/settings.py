@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     "kb",
     "chat",
     "reports",
+    "advisory",
+    "ocr",
 ]
 
 MIDDLEWARE = [
@@ -122,6 +124,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardPagination",
     "PAGE_SIZE": 20,
+    "DEFAULT_THROTTLE_RATES": {"ocr_extract": "60/hour"},
     "EXCEPTION_HANDLER": "core.exceptions.structured_exception_handler",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
@@ -169,10 +172,53 @@ MODEL_SELECTION_CRITERION = os.getenv("MODEL_SELECTION_CRITERION", "high_risk_re
 # ---------------------------------------------------------------------------
 # LLM / RAG configuration
 # ---------------------------------------------------------------------------
-LLM_API_KEY = os.getenv("LLM_API_KEY", "").strip()
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").strip()
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
-LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "45"))
+# Completely offline: answers come from a locally-running OpenAI-compatible
+# model server (Ollama by default; a llama.cpp server works via LLM_BASE_URL).
+# No cloud API is ever contacted. If the local server is down, the chat and
+# advisory features degrade to an extractive knowledge-base fallback.
+LLM_API_KEY = os.getenv("LLM_API_KEY", "").strip()  # optional; local servers need none
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1").strip()
+LLM_MODEL = os.getenv("LLM_MODEL", "llama3.2:3b").strip()
+# OCR (report-card scanning) — optional feature; engine probed lazily.
+TESSERACT_CMD = os.getenv("TESSERACT_CMD", "").strip()
+# OCR engine selection: "tesseract" (default) | "easyocr" (fallback to
+# tesseract when EasyOCR is not installed). Engines load lazily on first use.
+OCR_ENGINE = os.getenv("OCR_ENGINE", "tesseract").strip().lower()
+OCR_ALLOW_GPU = os.getenv("OCR_ALLOW_GPU", "0") == "1"
+# LLM-assisted extraction of fields the regex parser missed (local Ollama;
+# temperature 0; keep_alive=0 so it never stays resident beside another model).
+OCR_LLM_MODEL = os.getenv("OCR_LLM_MODEL", "").strip()
+# Optional vision-model stage — DISABLED by default; small models only.
+OCR_VISION_ENABLED = os.getenv("OCR_VISION_ENABLED", "0") == "1"
+OCR_VISION_MODEL = os.getenv("OCR_VISION_MODEL", "qwen2.5vl:3b").strip()
+# Optional hard-threshold variant pass (usually hurts decimals; off by default).
+OCR_THRESHOLD_PASS = os.getenv("OCR_THRESHOLD_PASS", "0") == "1"
+# Step 3: cross-engine voting with a second OCR engine (EasyOCR), per-field.
+OCR_SECOND_ENGINE = os.getenv("OCR_SECOND_ENGINE", "1") == "1"
+# Fine-tuned EasyOCR recognition network produced by `manage.py ocr_train`
+# (trained on the report/reports corpus). OPT-IN: measured page-level field
+# accuracy was 96.7% vs 98.4% for the stock model on the held-out corpus
+# (2026-11-15 eval), so the stock recognizer stays the default. Set e.g.
+# OCR_EASYOCR_RECOG_NETWORK=aimhra_report to use the fine-tuned model.
+OCR_EASYOCR_RECOG_NETWORK = os.getenv("OCR_EASYOCR_RECOG_NETWORK", "").strip()
+# Directory that holds EasyOCR models (detector + custom .pth). Empty = the
+# easyocr default (~/.EasyOCR).
+OCR_EASYOCR_MODEL_DIR = os.getenv("OCR_EASYOCR_MODEL_DIR", "").strip()
+# Step 3: capture-quality gate (min width, blur) — hard gate with a retake message.
+OCR_MIN_WIDTH = int(os.getenv("OCR_MIN_WIDTH", "1200"))
+OCR_MIN_BLUR_VAR = float(os.getenv("OCR_MIN_BLUR_VAR", "40"))
+OCR_ALLOW_LOW_QUALITY = os.getenv("OCR_ALLOW_LOW_QUALITY", "0") == "1"
+# Step 3: per-fix toggles used by the ablation evaluation.
+OCR_ENABLE_UPSCALE = os.getenv("OCR_ENABLE_UPSCALE", "1") == "1"
+OCR_ENABLE_CLAHE = os.getenv("OCR_ENABLE_CLAHE", "1") == "1"
+OCR_ENABLE_FUZZY = os.getenv("OCR_ENABLE_FUZZY", "1") == "1"
+OCR_ENABLE_SUGGESTIONS = os.getenv("OCR_ENABLE_SUGGESTIONS", "1") == "1"
+# Step 3: QR-code fast path (decode fields from a QR before falling back to OCR).
+OCR_ENABLE_QR = os.getenv("OCR_ENABLE_QR", "1") == "1"
+# Use the packaged tessdata_best LSTM data (better digits/decimals).
+OCR_TESSDATA_BEST = os.getenv("OCR_TESSDATA_BEST", "1") == "1"
+
+LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
 EMBEDDING_BACKEND = os.getenv("EMBEDDING_BACKEND", "local").strip().lower()
 VECTOR_BACKEND = os.getenv("VECTOR_BACKEND", "local").strip().lower()
 VECTOR_DB_URL = os.getenv("VECTOR_DB_URL", "").strip()

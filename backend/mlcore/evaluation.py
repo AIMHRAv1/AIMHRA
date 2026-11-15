@@ -59,9 +59,58 @@ def evaluate_classifier(y_true, y_pred, y_proba=None, labels=None):
             )
         except ValueError:
             metrics["roc_auc_ovr_macro"] = None
+        metrics["calibration"] = calibration_metrics(y_true, y_proba, labels=labels)
     else:
         metrics["roc_auc_ovr_macro"] = None
     return metrics
+
+
+def calibration_metrics(y_true, y_proba, labels=None, n_bins=10):
+    """Multiclass calibration: Brier score and expected calibration error.
+
+    Brier (multiclass): mean over samples of sum_c (p_c - 1{y==c})^2; lower
+    is better, 0 is perfect. ECE: confidence-binned |accuracy - confidence|
+    weighted by bin size (10 equal-width bins over [0, 1]). Pure numpy — no
+    additional dependencies. These describe probability quality on THIS
+    dataset only; they are not clinical validation."""
+    labels = labels or RISK_LEVELS
+    proba = np.asarray(y_proba, dtype=np.float64)
+    true_idx = np.array([labels.index(t) for t in y_true])
+    onehot = np.zeros_like(proba)
+    onehot[np.arange(len(true_idx)), true_idx] = 1.0
+    brier = float(np.mean(np.sum((proba - onehot) ** 2, axis=1)))
+
+    confidences = proba.max(axis=1)
+    predictions = proba.argmax(axis=1)
+    accuracies = (predictions == true_idx).astype(np.float64)
+    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
+    ece = 0.0
+    for lo, hi in zip(bin_edges[:-1], bin_edges[1:]):
+        in_bin = (confidences > lo) & (confidences <= hi) if lo > 0 else (confidences >= lo) & (confidences <= hi)
+        if in_bin.any():
+            ece += float(in_bin.mean() * abs(accuracies[in_bin].mean() - confidences[in_bin].mean()))
+    return {
+        "brier_multiclass": round(brier, 4),
+        "expected_calibration_error": round(ece, 4),
+        "n_bins": n_bins,
+    }
+
+
+def bootstrap_ci(y_true, y_pred, metric_fn, n_resamples=200, seed=42):
+    """Percentile bootstrap 95% CI for a scalar metric. metric_fn receives
+    (y_true_subset, y_pred_subset) and returns a float."""
+    rng = np.random.RandomState(seed)
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    n = len(y_true)
+    values = []
+    for _ in range(n_resamples):
+        idx = rng.randint(0, n, size=n)
+        values.append(float(metric_fn(y_true[idx], y_pred[idx])))
+    values.sort()
+    lo = values[int(0.025 * n_resamples)]
+    hi = values[int(0.975 * n_resamples) - 1]
+    return {"low": round(lo, 4), "high": round(hi, 4), "resamples": n_resamples}
 
 
 def selection_score(metrics, criterion):

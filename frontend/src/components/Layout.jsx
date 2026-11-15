@@ -1,20 +1,24 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import {
+  IconBell, IconBookOpen, IconClipboardList, IconCpu, IconFileText,
+  IconLayoutDashboard, IconLayoutGrid, IconUser, IconUserCog, IconUsers,
+} from './icons'
 
 const NAV_BY_ROLE = {
   HEALTHCARE_WORKER: [
-    { to: '/app/dashboard', label: 'Dashboard', icon: '▦' },
-    { to: '/app/patients', label: 'Patients', icon: '👥' },
-    { to: '/app/alerts', label: 'Risk Alerts', icon: '🔔' },
-    { to: '/app/reports', label: 'Reports', icon: '📄' },
+    { to: '/app/dashboard', label: 'Dashboard', Icon: IconLayoutGrid },
+    { to: '/app/patients', label: 'Patients', Icon: IconUsers },
+    { to: '/app/alerts', label: 'Risk Alerts', Icon: IconBell },
+    { to: '/app/reports', label: 'Reports', Icon: IconFileText },
   ],
   ADMIN: [
-    { to: '/app/dashboard', label: 'Dashboard', icon: '▦' },
-    { to: '/app/patients', label: 'Patients', icon: '👥' },
-    { to: '/app/admin/users', label: 'Users', icon: '👤' },
-    { to: '/app/admin/models', label: 'Models', icon: '🧠' },
-    { to: '/app/admin/knowledge', label: 'Knowledge Base', icon: '📚' },
-    { to: '/app/admin/audit', label: 'Audit Logs', icon: '🧾' },
+    { to: '/app/dashboard', label: 'Dashboard', Icon: IconLayoutGrid },
+    { to: '/app/patients', label: 'Patients', Icon: IconUsers },
+    { to: '/app/admin/users', label: 'Users', Icon: IconUserCog },
+    { to: '/app/admin/models', label: 'Models', Icon: IconCpu },
+    { to: '/app/admin/knowledge', label: 'Knowledge Base', Icon: IconBookOpen },
+    { to: '/app/admin/audit', label: 'Audit Logs', Icon: IconClipboardList },
   ],
 }
 
@@ -46,7 +50,7 @@ export default function Layout() {
         <nav className="side-nav">
           {nav.map((item) => (
             <NavLink key={item.to} to={item.to} className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>
-              <span aria-hidden="true">{item.icon}</span> {item.label}
+              <item.Icon className="side-link-icon" /> {item.label}
             </NavLink>
           ))}
         </nav>
