@@ -38,8 +38,10 @@ class ReportTests(TestCase):
         cls.worker = User.objects.create_user(
             username="repworker", email="r@t.com", password="Str0ng!Pass1", role="HEALTHCARE_WORKER"
         )
+        # Policy: workers see all patients, so a second worker can download
+        # any report too. The remaining denial path is a non-worker role.
         cls.stranger = User.objects.create_user(
-            username="reps2", email="s2@t.com", password="Str0ng!Pass1", role="HEALTHCARE_WORKER"
+            username="repstranger", email="s2@t.com", password="Str0ng!Pass1", role="PATIENT"
         )
         cls.profile = PatientProfile.objects.create(
             full_name="Report Patient", created_by=cls.worker
@@ -188,3 +190,18 @@ class ReportReferenceTests(TestCase):
         }
         text = self._pdf_text(self._report_for(payload))
         self.assertIn("No guideline references were available", text)
+
+
+class AdminReportPolicyTests(TestCase):
+    """Administrators do not generate patient reports (history-only access)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
+            username="repadmin2", email="ra@t.com", password="Str0ng!Pass1", role="ADMIN"
+        )
+
+    def test_admin_cannot_generate_report(self):
+        token = {"HTTP_AUTHORIZATION": f"Bearer {RefreshToken.for_user(self.admin).access_token}"}
+        r = self.client.post("/api/reports/", {"assessment": 1}, content_type="application/json", **token)
+        self.assertEqual(r.status_code, 403)

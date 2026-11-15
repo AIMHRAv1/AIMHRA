@@ -298,8 +298,31 @@ class AssessmentAPITests(AuthMixin, TestCase):
         )
         self.assertEqual(r.status_code, 400)
 
-    def test_worker_cannot_assess_another_workers_patient(self):
+    def test_worker_can_assess_any_patient(self):
+        # Policy: every health worker sees all patients — no assignment step.
         self.auth(self.worker)
+        r = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.other_profile.id},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertTrue(Assessment.objects.filter(patient=self.other_profile).exists())
+
+    def test_worker_can_access_assigned_patient(self):
+        self.auth(self.worker)
+        r = self.client.get(f"/api/assessments/risk-history/?patient={self.assigned_profile.id}")
+        self.assertEqual(r.status_code, 200)
+
+    def test_worker_can_read_any_patient_history(self):
+        # Policy: every health worker sees all patients.
+        self.auth(self.worker)
+        r = self.client.get(f"/api/assessments/risk-history/?patient={self.other_profile.id}")
+        self.assertEqual(r.status_code, 200)
+
+    def test_admin_cannot_perform_assessments(self):
+        # Policy: administrators do not record patient assessments.
+        self.auth(self.admin)
         r = self.client.post(
             "/api/assessments/",
             {**VALID_PAYLOAD, "patient": self.other_profile.id},
@@ -307,25 +330,6 @@ class AssessmentAPITests(AuthMixin, TestCase):
         )
         self.assertEqual(r.status_code, 403)
         self.assertFalse(Assessment.objects.filter(patient=self.other_profile).exists())
-
-    def test_worker_can_access_assigned_patient(self):
-        self.auth(self.worker)
-        r = self.client.get(f"/api/assessments/risk-history/?patient={self.assigned_profile.id}")
-        self.assertEqual(r.status_code, 200)
-
-    def test_worker_cannot_read_unauthorized_patient(self):
-        self.auth(self.worker)
-        r = self.client.get(f"/api/assessments/risk-history/?patient={self.other_profile.id}")
-        self.assertEqual(r.status_code, 403)
-
-    def test_admin_can_assess_any_patient(self):
-        self.auth(self.admin)
-        r = self.client.post(
-            "/api/assessments/",
-            {**VALID_PAYLOAD, "patient": self.other_profile.id},
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 201)
 
     def test_history_and_trend_endpoints(self):
         self.auth(self.worker)
@@ -341,6 +345,25 @@ class AssessmentAPITests(AuthMixin, TestCase):
         data = r.json()["data"] or r.json()
         self.assertEqual(data["trend"]["status"], "baseline")
         self.assertIn("does not predict future risk", data["disclaimer"])
+
+    def test_trend_shows_treating_workers_even_for_admin(self):
+        # The administrator history view must show which health worker treated
+        # the patient (worker names are not patient PII).
+        Assessment.objects.all().delete()
+        self.worker.full_name = "Dr. Treating Worker"
+        self.worker.save(update_fields=["full_name"])
+        self.auth(self.worker)
+        self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.profile.id},
+            content_type="application/json",
+        )
+        self.auth(self.admin)
+        r = self.client.get(f"/api/assessments/risk-trends/?patient={self.profile.id}")
+        self.assertEqual(r.status_code, 200, r.content)
+        data = r.json()["data"] or r.json()
+        self.assertIn("Dr. Treating Worker", data["treating_workers"])
+        self.assertEqual(data["series"][0]["recorded_by"], "Dr. Treating Worker")
 
     def test_trend_is_descriptive_not_predictive(self):
         self.auth(self.worker)

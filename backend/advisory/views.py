@@ -15,6 +15,13 @@ class AdvisoryGenerateView(APIView):
     advisory for one assessment using the chatbot pipeline."""
 
     def post(self, request):
+        if request.user.role == "ADMIN":
+            raise ApiError(
+                "Administrators do not generate care advisories — it is a "
+                "healthcare-worker feature.",
+                code="ADMIN_ADVISORY_DENIED",
+                status_code=403,
+            )
         assessment_id = request.data.get("assessment")
         if not assessment_id:
             raise ApiError("`assessment` is required.", code="VALIDATION_ERROR", status_code=400)

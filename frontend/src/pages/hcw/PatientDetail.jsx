@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import { assessmentService, patientService, reportService } from '../../services/auth'
 import { apiError } from '../../api/client'
 import { RiskTrendChart, ShapBars } from '../../charts'
@@ -41,8 +42,17 @@ function computeAge(dateOfBirth) {
 export default function PatientDetail() {
   const { id: idParam } = useParams()
   const id = Number(idParam)
+  const { user } = useAuth()
+  // Administrators manage the system, not the people in it: they never see
+  // patient-identifying information (the API redacts it too) and their
+  // patient workspace is limited to the History & Trend view, which names
+  // the treating health workers. Patient creation/assessment/report/ai
+  // features are health-worker only.
+  const isAdmin = user?.role === 'ADMIN'
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = TABS.some((t) => t.key === searchParams.get('tab')) ? searchParams.get('tab') : 'overview'
+  const requestedTab = TABS.some((t) => t.key === searchParams.get('tab')) ? searchParams.get('tab') : 'overview'
+  const tab = isAdmin ? 'history' : requestedTab
+  const tabs = isAdmin ? TABS.filter((t) => t.key === 'history') : TABS
 
   const [patient, setPatient] = useState(null)
   const [trend, setTrend] = useState(null)
@@ -122,12 +132,15 @@ export default function PatientDetail() {
         <div>
           <div className="muted small"><Link to="/app/patients">← All patients</Link></div>
           <h1>{patient.patient_code}</h1>
-          <p className="muted">
-            {patient.full_name || 'Unnamed patient'}
-            {age != null && <span> · Age {age}</span>}
-            {patient.gestational_week_at_registration != null && <span> · Gest. wk {patient.gestational_week_at_registration}</span>}
-            {patient.blood_group && <span> · {patient.blood_group}</span>}
-          </p>
+          {!isAdmin && (
+            <p className="muted">
+              {patient.full_name || 'Unnamed patient'}
+              {age != null && <span> · Age {age}</span>}
+              {patient.gestational_week_at_registration != null && <span> · Gest. wk {patient.gestational_week_at_registration}</span>}
+              {patient.blood_group && <span> · {patient.blood_group}</span>}
+            </p>
+          )}
+          {isAdmin && <p className="muted small">Administrator view — patient information is not accessible.</p>}
           <p className="muted small">
             Created {new Date(patient.created_at).toLocaleDateString()}
             {patient.updated_at && <span> · updated {new Date(patient.updated_at).toLocaleDateString()}</span>}
@@ -141,13 +154,13 @@ export default function PatientDetail() {
               {currentConfidence != null && <span className="muted"> · confidence {Math.round(currentConfidence * 100)}%</span>}
             </span>
           ) : <span className="muted small">No assessment yet</span>}
-          <button className="btn btn-primary" onClick={() => setTab('assessment')}>+ New Assessment</button>
-          <button className="btn btn-secondary" onClick={() => setTab('info')}>Edit Patient</button>
+          {!isAdmin && <button className="btn btn-primary" onClick={() => setTab('assessment')}>+ New Assessment</button>}
+          {!isAdmin && <button className="btn btn-secondary" onClick={() => setTab('info')}>Edit Patient</button>}
         </div>
       </header>
 
       <nav className="tabs" role="tablist" aria-label="Patient workspace">
-        {TABS.map(({ key, label, Icon, action }) => {
+        {tabs.map(({ key, label, Icon, action }) => {
           const active = tab === key
           const badge = key === 'alerts' ? openAlertCount : null
           return (
@@ -191,7 +204,7 @@ export default function PatientDetail() {
             onViewAdvisory={() => setTab('advisory')}
           />
         )}
-        {tab === 'history' && <HistoryPanel patientId={id} />}
+        {tab === 'history' && <HistoryPanel patientId={id} showReportActions={!isAdmin} />}
         {tab === 'alerts' && <AlertsPanel patientId={id} showStatus="ALL" />}
         {tab === 'chat' && <ChatPanel patientId={id} />}
         {tab === 'advisory' && <AdvisoryPanel patientId={id} />}

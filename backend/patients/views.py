@@ -19,12 +19,20 @@ from patients.serializers import PatientAssignmentSerializer, PatientProfileSeri
 class PatientListView(generics.ListCreateAPIView):
     """Healthcare-worker/administrator patient management.
 
-    GET  /api/patients/   - scoped list (search: code/name/phone/email)
+    GET  /api/patients/   - scoped list (search: code/name/phone/email);
+                            administrator responses are PII-redacted
     POST /api/patients/   - create a standalone patient record. The creator is
                             automatically granted access (no admin step needed).
+                            Administrators are denied: they do not handle
+                            patient information.
     """
 
     serializer_class = PatientProfileSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["redact_pii"] = self.request.user.role == "ADMIN"
+        return context
 
     def get_queryset(self):
         qs = scoped_patient_queryset(self.request.user)
@@ -50,6 +58,13 @@ class PatientListView(generics.ListCreateAPIView):
         return ok({"results": serializer.data, "count": qs.count()})
 
     def create(self, request, *args, **kwargs):
+        if request.user.role == "ADMIN":
+            raise ApiError(
+                "Administrators do not create patient records — patient "
+                "information is handled by healthcare workers.",
+                code="ADMIN_PATIENT_WRITE_DENIED",
+                status_code=403,
+            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         patient = serializer.save(created_by=request.user)
@@ -61,7 +76,10 @@ class PatientListView(generics.ListCreateAPIView):
 
 
 class PatientDetailView(generics.RetrieveUpdateAPIView):
-    """GET/PATCH one patient record with authorization enforcement."""
+    """GET/PATCH one patient record with authorization enforcement.
+
+    Administrator responses are PII-redacted (code + clinical analytics only)
+    and administrators cannot modify patient records."""
 
     serializer_class = PatientProfileSerializer
 
@@ -79,9 +97,17 @@ class PatientDetailView(generics.RetrieveUpdateAPIView):
         context = super().get_serializer_context()
         summary = getattr(self, "patient_summary", {})
         context["patient_summaries"] = {self.kwargs["pk"]: summary} if summary else {}
+        context["redact_pii"] = self.request.user.role == "ADMIN"
         return context
 
     def update(self, request, *args, **kwargs):
+        if request.user.role == "ADMIN":
+            raise ApiError(
+                "Administrators do not modify patient records — patient "
+                "information is handled by healthcare workers.",
+                code="ADMIN_PATIENT_WRITE_DENIED",
+                status_code=403,
+            )
         partial = kwargs.pop("partial", False)
         profile = self.get_object()
         serializer = self.get_serializer(profile, data=request.data, partial=partial)
@@ -95,20 +121,22 @@ class PatientDetailView(generics.RetrieveUpdateAPIView):
 
 
 class PatientAssignmentListView(generics.ListCreateAPIView):
-    """Admin manages worker->patient authorization."""
+    """Legacy worker->patient assignment list.
+
+    Creation is retired: every healthcare worker now sees all patients, so
+    there is nothing left to assign. The GET list stays for audit/history of
+    legacy assignments."""
 
     serializer_class = PatientAssignmentSerializer
     permission_classes = [IsAdmin]
     queryset = PatientAssignment.objects.select_related("patient", "healthcare_worker", "assigned_by").all()
 
     def perform_create(self, serializer):
-        assignment = serializer.save(assigned_by=self.request.user)
-        audit_svc.log_event(
-            self.request,
-            "PATIENT_ASSIGNED",
-            target_type="patient_assignment",
-            target_id=str(assignment.id),
-            detail={"patient": assignment.patient_id, "worker": assignment.healthcare_worker_id},
+        raise ApiError(
+            "Patient assignments are retired — every healthcare worker can see "
+            "all patients, so no assignment step is needed.",
+            code="ASSIGNMENTS_RETIRED",
+            status_code=403,
         )
 
 

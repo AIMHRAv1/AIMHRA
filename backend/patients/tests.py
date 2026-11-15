@@ -112,17 +112,12 @@ class PatientApiTests(TestCase):
         self.assertEqual(patient.full_name, "Updated Name")
         self.assertEqual(patient.emergency_contact_name, "New EC")
 
-    def test_worker_cannot_access_another_workers_patient(self):
-        patient = PatientProfile.objects.create(full_name="Private", created_by=self.other_worker)
+    def test_worker_can_access_any_patient(self):
+        # Policy: every health worker sees all patients — no assignment step.
+        patient = PatientProfile.objects.create(full_name="Owned By Other", created_by=self.other_worker)
         r = self.client.get(f"/api/patients/{patient.id}/", **self.worker_auth)
-        self.assertEqual(r.status_code, 403)
-        r = self.client.patch(
-            f"/api/patients/{patient.id}/",
-            {"full_name": "Hacked"},
-            content_type="application/json",
-            **self.worker_auth,
-        )
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["full_name"], "Owned By Other")
 
     def test_worker_can_access_assigned_patient(self):
         patient = PatientProfile.objects.create(full_name="Assigned", created_by=self.other_worker)
@@ -137,20 +132,25 @@ class PatientApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["data"]["count"], 2)
 
-    def test_worker_automatically_sees_created_patients(self):
+    def test_worker_automatically_sees_all_patients(self):
+        # Policy: workers see every patient record, not just their own.
         PatientProfile.objects.create(full_name="Mine", created_by=self.worker)
         PatientProfile.objects.create(full_name="Not Mine", created_by=self.other_worker)
         r = self.client.get("/api/patients/", **self.worker_auth)
         names = {p["full_name"] for p in r.json()["data"]["results"]}
-        self.assertEqual(names, {"Mine"})
+        self.assertEqual(names, {"Mine", "Not Mine"})
 
     def test_search_by_code_name_phone_email(self):
         PatientProfile.objects.create(full_name="Searchable Person", phone="+9771234567", email="s@e.com")
         for term in ["Searchable", "+9771234567", "s@e.com", "P-"]:
             r = self.client.get(f"/api/patients/?search={term}", **self.admin_auth)
             self.assertEqual(r.status_code, 200)
-            names = {p["full_name"] for p in r.json()["data"]["results"]}
-            self.assertIn("Searchable Person", names)
+            results = r.json()["data"]["results"]
+            self.assertEqual(len(results), 1, term)
+            # matching still works on stored values, but the admin response
+            # itself stays PII-redacted
+            self.assertIsNone(results[0]["full_name"], term)
+            self.assertTrue(results[0]["patient_code"].startswith("P-"), term)
 
     def test_blood_group_validated(self):
         r = self.client.post(
@@ -203,3 +203,88 @@ class PatientStatTests(TestCase):
         by_role = r.json()["data"]["users"]["by_role"]
         self.assertNotIn("PATIENT", by_role)
         self.assertEqual(set(by_role), {"HEALTHCARE_WORKER", "ADMIN"})
+
+class AdminPatientPrivacyTests(TestCase):
+    """Administrators must NOT see patient information, but keep access to
+    clinical analytics (history, trends, reports) via code + summary fields."""
+
+    def setUp(self):
+        self.worker = make_user("pworker1")
+        self.admin = make_user("padmin1", role="ADMIN")
+        self.worker_auth = token_for(self.worker)
+        self.admin_auth = token_for(self.admin)
+        self.patient = PatientProfile.objects.create(
+            full_name="Private Person", email="p@e.com", phone="+9779000000001",
+            date_of_birth="1998-05-12", blood_group="O+", address="Kathmandu",
+            emergency_contact_name="Spouse", medical_history_notes="note",
+            gestational_week_at_registration=24, created_by=self.worker,
+        )
+
+    def test_admin_detail_is_redacted_but_code_and_analytics_remain(self):
+        r = self.client.get(f"/api/patients/{self.patient.id}/", **self.admin_auth)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()  # detail endpoint returns the plain serializer payload
+        for field in ("full_name", "email", "phone", "address", "date_of_birth",
+                      "blood_group", "gestational_week_at_registration",
+                      "emergency_contact_name", "medical_history_notes"):
+            self.assertIsNone(data[field], field)
+        self.assertEqual(data["patient_code"], self.patient.patient_code)
+        self.assertIn("current_risk", data)
+        self.assertIn("assessment_count", data)
+
+    def test_admin_list_is_redacted(self):
+        r = self.client.get("/api/patients/", **self.admin_auth)
+        self.assertEqual(r.status_code, 200)
+        results = r.json()["data"]["results"]
+        self.assertEqual(len(results), 1)
+        self.assertIsNone(results[0]["full_name"])
+        self.assertEqual(results[0]["patient_code"], self.patient.patient_code)
+
+    def test_worker_still_sees_full_patient_information(self):
+        r = self.client.get(f"/api/patients/{self.patient.id}/", **self.worker_auth)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()  # detail endpoint returns the plain serializer payload
+        self.assertEqual(data["full_name"], "Private Person")
+        self.assertEqual(data["phone"], "+9779000000001")
+
+    def test_admin_cannot_update_patient(self):
+        r = self.client.patch(
+            f"/api/patients/{self.patient.id}/",
+            {"full_name": "Changed Name"},
+            content_type="application/json",
+            **self.admin_auth,
+        )
+        self.assertEqual(r.status_code, 403)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.full_name, "Private Person")
+
+    def test_admin_cannot_create_patient(self):
+        r = self.client.post(
+            "/api/patients/",
+            {**VALID_PATIENT},
+            content_type="application/json",
+            **self.admin_auth,
+        )
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(PatientProfile.objects.count(), 1)
+
+
+class AdminAssignmentRetiredTests(TestCase):
+    """Administrators can no longer assign patients to health workers —
+    every worker sees all patients, so the assignment step is retired."""
+
+    def setUp(self):
+        self.admin = make_user("asgadmin", role="ADMIN")
+        self.worker = make_user("asgworker")
+        self.admin_auth = token_for(self.admin)
+
+    def test_admin_cannot_create_assignment(self):
+        patient = PatientProfile.objects.create(full_name="P", created_by=self.worker)
+        r = self.client.post(
+            "/api/patients/assignments/",
+            {"healthcare_worker": self.worker.id, "patient": patient.id},
+            content_type="application/json",
+            **self.admin_auth,
+        )
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(PatientAssignment.objects.count(), 0)

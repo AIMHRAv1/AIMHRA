@@ -55,6 +55,13 @@ class SessionListCreateView(APIView):
         return ok({"sessions": SessionSerializer(qs[:50], many=True).data})
 
     def post(self, request):
+        if request.user.role == "ADMIN":
+            raise ApiError(
+                "Administrators do not use the patient AI assistant — it is a "
+                "healthcare-worker feature.",
+                code="ADMIN_CHAT_DENIED",
+                status_code=403,
+            )
         patient = _resolve_patient_for_session(request, request.data.get("patient"))
         serializer = SessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

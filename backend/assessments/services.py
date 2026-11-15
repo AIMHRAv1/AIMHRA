@@ -145,10 +145,12 @@ def create_assessment(patient, data, request=None):
 
 
 def prediction_series(patient):
-    """Serialized predictions for a patient, oldest first."""
+    """Serialized predictions for a patient, oldest first. Each entry names
+    the health worker who recorded the visit (worker names are not patient
+    PII — the administrator history view depends on them)."""
     rows = (
         Prediction.objects.filter(assessment__patient=patient)
-        .select_related("assessment")
+        .select_related("assessment", "assessment__created_by")
         .order_by("assessment__visit_date", "id")
     )
     return [
@@ -159,9 +161,30 @@ def prediction_series(patient):
             "model": f"{p.model_name} {p.model_version}",
             "visit_date": p.assessment.visit_date.isoformat(),
             "gestational_week": p.assessment.gestational_week,
+            "recorded_by": (
+                p.assessment.created_by.full_name or p.assessment.created_by.username
+                if p.assessment.created_by
+                else None
+            ),
         }
         for p in rows
     ]
+
+
+def treating_workers(patient):
+    """Health workers connected to this patient: the record creator plus every
+    worker who recorded an assessment, most recent first. Shown on the
+    administrator history view ("who treated this patient")."""
+    names = []
+    for a in patient.assessments.exclude(created_by=None).order_by("-visit_date", "-id").select_related("created_by"):
+        name = a.created_by.full_name or a.created_by.username
+        if name and name not in names:
+            names.append(name)
+    if patient.created_by:
+        name = patient.created_by.full_name or patient.created_by.username
+        if name and name not in names:
+            names.append(name)
+    return names
 
 
 def build_response(assessment, prediction, rules_out, alerts, trend):

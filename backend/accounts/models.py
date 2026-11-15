@@ -1,5 +1,18 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.db import models
+
+
+class UserManager(DjangoUserManager):
+    """Manages the single-role user model.
+
+    Superusers are created from the command line only, so ``createsuperuser``
+    (and ``create_superuser`` in general) makes an ADMIN; everyone else starts
+    as a HEALTHCARE_WORKER created by an admin.
+    """
+
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        extra_fields.setdefault("role", self.model.ROLE_ADMIN)
+        return super().create_superuser(username, email, password, **extra_fields)
 
 
 class User(AbstractUser):
@@ -8,6 +21,8 @@ class User(AbstractUser):
     HEALTHCARE_WORKER: manages patient records, assessments, alerts and reports.
     ADMIN: manages users, models, knowledge base, audit logs and all patient data.
     """
+
+    objects = UserManager()
 
     ROLE_HEALTHCARE_WORKER = "HEALTHCARE_WORKER"
     ROLE_ADMIN = "ADMIN"

@@ -2,10 +2,27 @@ from rest_framework import serializers
 
 from patients.models import PatientAssignment, PatientProfile
 
+# Fields that identify or describe the patient personally. Administrators
+# manage the system, not the people in it — these are stripped from every
+# response when the request comes from an ADMIN account (redact_pii context
+# flag). Clinical analytics (risk, counts, dates) stay visible so admins can
+# still follow history, trends and reports.
+PII_FIELDS = [
+    "full_name", "email", "phone", "address", "date_of_birth", "blood_group",
+    "gestational_week_at_registration", "estimated_due_date", "gravidity",
+    "parity", "medical_history_notes", "allergies", "emergency_contact_name",
+    "emergency_contact_phone", "obstetric_history_notes", "current_medications",
+    "additional_notes",
+]
+
 
 class PatientProfileSerializer(serializers.ModelSerializer):
     """Serializes a standalone patient record with optional clinical summary
-    fields (provided via the ``patient_summaries`` serializer context)."""
+    fields (provided via the ``patient_summaries`` serializer context).
+
+    With ``redact_pii`` in the serializer context (administrator requests)
+    every patient-identifying field is blanked — admins see the record's
+    code and clinical analytics only."""
 
     created_by_name = serializers.CharField(source="created_by.full_name", read_only=True, default="")
     current_risk = serializers.SerializerMethodField()
@@ -38,6 +55,13 @@ class PatientProfileSerializer(serializers.ModelSerializer):
 
     def _summary(self, obj):
         return (self.context.get("patient_summaries") or {}).get(obj.id, {})
+
+    def to_representation(self, obj):
+        data = super().to_representation(obj)
+        if self.context.get("redact_pii"):
+            for field in PII_FIELDS:
+                data[field] = None
+        return data
 
     def get_current_risk(self, obj):
         return self._summary(obj).get("current_risk")

@@ -5,7 +5,7 @@ import { RiskTrendChart } from '../../charts'
 import { Disclaimer, EmptyState, ErrorState, Loading, RiskBadge } from '../ui'
 import { downloadReport } from '../../utils/reportDownload'
 
-export default function HistoryPanel({ patientId }) {
+export default function HistoryPanel({ patientId, showReportActions = true }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [busyId, setBusyId] = useState(null)
@@ -46,6 +46,16 @@ export default function HistoryPanel({ patientId }) {
   return (
     <div className="stack">
       {notice && <div className="alert alert-info">{notice}</div>}
+
+      {Array.isArray(data.treating_workers) && data.treating_workers.length > 0 && (
+        <div className="card">
+          <h2 className="section-title">Treating health workers</h2>
+          <p className="muted">
+            {data.treating_workers.join(', ')}
+          </p>
+          <p className="muted small">Record creator and the workers who recorded each assessment, most recent first.</p>
+        </div>
+      )}
 
       {series.length === 0 ? (
         <EmptyState title="No assessments yet" hint="Complete a New Assessment to start the patient's risk history." />
@@ -121,7 +131,9 @@ export default function HistoryPanel({ patientId }) {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Visit date</th><th>Gest. week</th><th>Risk</th><th>Confidence</th><th>Model</th><th>Report</th>
+                  <th>Visit date</th><th>Gest. week</th><th>Risk</th><th>Confidence</th>
+                  <th>Recorded by</th><th>Model</th>
+                  {showReportActions && <th>Report</th>}
                 </tr>
               </thead>
               <tbody>
@@ -131,13 +143,16 @@ export default function HistoryPanel({ patientId }) {
                     <td>{s.gestational_week ?? '—'}</td>
                     <td><RiskBadge level={s.risk_level} /></td>
                     <td>{Math.round(s.probability * 100)}%</td>
+                    <td className="muted small">{s.recorded_by || '—'}</td>
                     <td className="muted small">{s.model}</td>
-                    <td>
-                      <button className="btn btn-small btn-secondary" disabled={busyId === s.id}
-                              onClick={() => generateReport(s.id)}>
-                        {busyId === s.id ? '…' : 'PDF ↓'}
-                      </button>
-                    </td>
+                    {showReportActions && (
+                      <td>
+                        <button className="btn btn-small btn-secondary" disabled={busyId === s.id}
+                                onClick={() => generateReport(s.id)}>
+                          {busyId === s.id ? '…' : 'PDF ↓'}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

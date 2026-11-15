@@ -1,28 +1,18 @@
 import { useEffect, useState } from 'react'
-import { adminService, patientService } from '../../services/auth'
+import { adminService } from '../../services/auth'
 import { apiError } from '../../api/client'
-import { EmptyState, ErrorState, Loading } from '../../components/ui'
+import { ErrorState, Loading } from '../../components/ui'
 
 export default function AdminUsers() {
   const [users, setUsers] = useState(null)
-  const [patients, setPatients] = useState([])
-  const [assignments, setAssignments] = useState([])
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
-  const [creating, setCreating] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ username: '', email: '', full_name: '', phone: '', role: 'HEALTHCARE_WORKER', password: '' })
-  const [assignForm, setAssignForm] = useState({ healthcare_worker: '', patient: '' })
 
   async function reload() {
-    const [u, p, a] = await Promise.all([
-      adminService.users(),
-      patientService.list(),
-      patientService.assignments(),
-    ])
+    const u = await adminService.users()
     setUsers(u.results ?? u)
-    setPatients(p.results ?? [])
-    setAssignments(a.results ?? a)
   }
 
   useEffect(() => { reload().catch(setError) }, [])
@@ -46,30 +36,18 @@ export default function AdminUsers() {
     } catch (err) { setNotice(apiError(err).message) }
   }
 
-  async function assign(e) {
-    e.preventDefault()
-    try {
-      await patientService.createAssignment({
-        healthcare_worker: Number(assignForm.healthcare_worker),
-        patient: Number(assignForm.patient),
-      })
-      setNotice('Patient assigned.')
-      setAssignForm({ healthcare_worker: '', patient: '' })
-      await reload()
-    } catch (err) { setNotice(apiError(err).message) }
-  }
-
   if (error) return <div className="page"><ErrorState error={error} /></div>
   if (!users) return <div className="page"><Loading /></div>
-
-  const workers = users.filter((u) => u.role === 'HEALTHCARE_WORKER' && u.is_active)
 
   return (
     <div className="page">
       <header className="page-head">
         <div>
           <h1>Users</h1>
-          <p className="muted">Create staff accounts and manage patient assignments.</p>
+          <p className="muted">
+            Create and manage staff accounts. Patient assignments are retired —
+            every healthcare worker can see all patients.
+          </p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>+ New user</button>
       </header>
@@ -111,37 +89,6 @@ export default function AdminUsers() {
             ))}
           </tbody>
         </table>
-      </div>
-
-      <div className="card">
-        <h2 className="section-title">Patient assignments</h2>
-        <form className="assign-form" onSubmit={assign}>
-          <select value={assignForm.healthcare_worker} onChange={(e) => setAssignForm({ ...assignForm, healthcare_worker: e.target.value })} required>
-            <option value="">— healthcare worker —</option>
-            {workers.map((w) => <option key={w.id} value={w.id}>{w.full_name || w.username}</option>)}
-          </select>
-          <select value={assignForm.patient} onChange={(e) => setAssignForm({ ...assignForm, patient: e.target.value })} required>
-            <option value="">— patient —</option>
-            {patients.map((p) => <option key={p.id} value={p.id}>{p.patient_code} ({p.full_name || 'Unnamed'})</option>)}
-          </select>
-          <button className="btn btn-primary">Assign</button>
-        </form>
-        {assignments.length === 0 ? (
-          <EmptyState title="No assignments" hint="Assign patients to healthcare workers to grant access." />
-        ) : (
-          <table className="data-table">
-            <thead><tr><th>Healthcare worker</th><th>Patient</th><th>Assigned</th></tr></thead>
-            <tbody>
-              {assignments.map((a) => (
-                <tr key={a.id}>
-                  <td>{a.healthcare_worker_username}</td>
-                  <td>{a.patient_code}</td>
-                  <td>{new Date(a.created_at).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
       </div>
     </div>
   )

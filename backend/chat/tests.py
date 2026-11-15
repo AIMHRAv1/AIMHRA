@@ -63,18 +63,27 @@ class ChatPipelineTests(TestCase):
         self.assertEqual(session.patient_id, self.profile.id)
         self.assertEqual(session.created_by_id, self.worker.id)
 
-    def test_worker_cannot_create_session_for_unauthorized_patient(self):
-        token = RefreshToken.for_user(self.worker).access_token
+    def test_non_worker_cannot_create_session(self):
+        # Policy: workers see all patients; only non-worker roles are denied.
+        stranger = User.objects.create_user(
+            username="chatpatient", email="cp@t.com", password="Str0ng!Pass1", role="PATIENT"
+        )
+        token = RefreshToken.for_user(stranger).access_token
         r = self.client.post(
             "/api/chat/sessions/",
-            {"patient": self.other_profile.id},
+            {"patient": self.profile.id},
             content_type="application/json",
             HTTP_AUTHORIZATION=f"Bearer {token}",
         )
         self.assertEqual(r.status_code, 403)
 
-    def test_worker_cannot_open_another_workers_session(self):
-        token = RefreshToken.for_user(self.other_worker).access_token
+    def test_non_worker_cannot_open_session(self):
+        # Policy: workers see all patients (so all patient sessions);
+        # non-worker roles are denied.
+        stranger = User.objects.create_user(
+            username="chatpatient2", email="cp2@t.com", password="Str0ng!Pass1", role="PATIENT"
+        )
+        token = RefreshToken.for_user(stranger).access_token
         r = self.client.get(
             f"/api/chat/sessions/{self.session_id}/",
             HTTP_AUTHORIZATION=f"Bearer {token}",
@@ -173,3 +182,24 @@ class ChatPipelineTests(TestCase):
         )
         self.assertEqual(r.status_code, 403)
         self.assertTrue(ChatSession.objects.filter(pk=self.session_id).exists())
+
+class AdminChatPolicyTests(TestCase):
+    """Administrators do not use the patient AI assistant."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
+            username="chatadmin2", email="ca2@t.com", password="Str0ng!Pass1", role="ADMIN"
+        )
+        cls.worker = User.objects.create_user(
+            username="chatworker3", email="c3@t.com", password="Str0ng!Pass1", role="HEALTHCARE_WORKER"
+        )
+        cls.profile = PatientProfile.objects.create(full_name="Policy Patient", created_by=cls.worker)
+
+    def test_admin_cannot_create_chat_session(self):
+        token = {"HTTP_AUTHORIZATION": f"Bearer {RefreshToken.for_user(self.admin).access_token}"}
+        r = self.client.post(
+            "/api/chat/sessions/", {"patient": self.profile.id},
+            content_type="application/json", **token,
+        )
+        self.assertEqual(r.status_code, 403)

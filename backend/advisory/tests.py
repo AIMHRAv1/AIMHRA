@@ -143,13 +143,16 @@ class AdvisoryPipelineTests(TestCase):
         # ...but the advice on what to do is still present.
         self.assertTrue(len(content) > 300)
 
-    def test_unauthorized_worker_cannot_generate_or_read(self):
+    def test_non_worker_cannot_generate_or_read(self):
+        # Policy: workers see all patients; only non-worker roles are denied.
         _data, assessment = self._create_assessment(self.profile, VITALS)
-        other_token = RefreshToken.for_user(self.other_worker).access_token
-        other_auth = {"HTTP_AUTHORIZATION": f"Bearer {other_token}"}
-        r = self._generate(assessment.id, auth=other_auth)
+        stranger = User.objects.create_user(
+            username="advpatient", email="ap@t.com", password="Str0ng!Pass1", role="PATIENT"
+        )
+        stranger_auth = {"HTTP_AUTHORIZATION": f"Bearer {RefreshToken.for_user(stranger).access_token}"}
+        r = self._generate(assessment.id, auth=stranger_auth)
         self.assertEqual(r.status_code, 403)
-        r2 = self.client.get(f"/api/advisory/detail/?assessment={assessment.id}", **other_auth)
+        r2 = self.client.get(f"/api/advisory/detail/?assessment={assessment.id}", **stranger_auth)
         self.assertEqual(r2.status_code, 403)
 
     def test_assessment_required(self):

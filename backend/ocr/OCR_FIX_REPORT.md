@@ -16,6 +16,7 @@
 | 5 | EasyOCR returned one box per text region; label/value/reference columns landed on separate "lines" in random order | The parser then matched the reference column instead of the value (main cause of EasyOCR's 46–74 % vitals accuracy). |
 | 6 | Crop re-read concatenated the whole line ("22.1" + "18.5-24.9" → 22.13185249) and adopted plausible-looking garbage | Bad values replaced good ones. |
 | 7 | Cascade never replaced an implausible Tesseract reading with a plausible cross-engine/re-read value | Fixable errors stayed wrong (age 520, BMI 221). |
+| 8 | **Small-integer misreads passed silently**: a lone "6" read as "3" at 0.92 confidence beat the 0.85 cascade threshold, so the field was never re-verified (patient 132_medicare, fasting glucose) | Wrong-but-plausible value accepted. Fixed: 1–2-digit integer readings below 0.95 confidence are now re-verified by the crop re-read + EasyOCR; adoption requires BOTH to agree, a split decision raises a red flag with candidates. Re-eval after the fix: still 100 % (640/640) on the 80 held-out cards, latency unchanged (16.7 s/card). |
 
 ## 2. What was changed
 
@@ -50,7 +51,7 @@
 | | Field acc | Dangerous | Per template | Latency |
 |---|---|---|---|---|
 | Before fixes (12-card sample, pre-fix code) | 93.8 % lab / 95.8 % synthetic | age 520, BMI 221 cases | — | ~26 s |
-| **After — all 80 held-out cards** | **100.0 % (640/640)** | **0** | lab / municipal / medicare / clinical all 1.00 | 17.5 s/card |
+| **After — all 80 held-out cards** | **100.0 % (640/640)** | **0** | lab / municipal / medicare / clinical all 1.00 | 16.7 s/card |
 
 ## 5. Honest assessment
 

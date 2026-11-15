@@ -39,6 +39,13 @@ class ReportListCreateView(APIView):
         return ok({"reports": ReportSerializer(qs[:50], many=True).data})
 
     def post(self, request):
+        if request.user.role == "ADMIN":
+            raise ApiError(
+                "Administrators do not generate reports — only healthcare "
+                "workers create patient reports.",
+                code="ADMIN_REPORT_DENIED",
+                status_code=403,
+            )
         assessment_id = request.data.get("assessment")
         if not assessment_id:
             raise ApiError("`assessment` id is required.", code="VALIDATION_ERROR", status_code=400)

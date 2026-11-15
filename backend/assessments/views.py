@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from assessments.models import Alert, Assessment, Prediction
 from assessments.serializers import AlertAckSerializer, AlertSerializer, AssessmentSerializer
 from assessments.rules.trend_engine import evaluate_trends
-from assessments.services import DISCLAIMER, create_assessment, prediction_series
+from assessments.services import DISCLAIMER, create_assessment, prediction_series, treating_workers
 from assessments.trends import compare_measurements, compute_trend, measurement_series
 from core.exceptions import ApiError
 from core.responses import ok
@@ -57,6 +57,13 @@ class AssessmentListCreateView(generics.ListCreateAPIView):
         return ok({"results": serializer.data, "count": qs.count()} if page is None else {"results": serializer.data})
 
     def create(self, request, *args, **kwargs):
+        if request.user.role == "ADMIN":
+            raise ApiError(
+                "Administrators do not perform assessments — only healthcare "
+                "workers record patient assessments.",
+                code="ADMIN_ASSESSMENT_DENIED",
+                status_code=403,
+            )
         patient = _resolve_patient(request)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -104,6 +111,10 @@ class RiskTrendView(APIView):
             {
                 "trend": compute_trend(history),
                 "series": history,
+                # Health workers connected to this patient (record creator +
+                # every assessment's recording worker). Worker names are not
+                # patient PII — the administrator history view shows them.
+                "treating_workers": treating_workers(patient),
                 # Actual measurements across visit dates + deltas vs the
                 # previous visit. Plain calculations; no thresholds applied
                 # until the trend ruleset is clinically reviewed.

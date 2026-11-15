@@ -1,40 +1,29 @@
-"""Access-control helpers: who may see which patient profile."""
+"""Access-control helpers: who may see which patient profile.
+
+Policy: every HEALTHCARE_WORKER sees ALL patient records — no assignment
+step. ADMIN accounts see all records too, but patient-identifying fields are
+redacted for them (see patients.serializers.PII_FIELDS) and their patient
+workspace is limited to the history view.
+"""
 
 
 def patient_ids_for_healthcare_worker(user):
-    """All patient ids a healthcare worker may access.
+    """All patient ids a healthcare worker may access: every patient record.
 
-    Access = patients the worker created themselves OR patients explicitly
-    assigned to them by an administrator. Admins use the all-patient path and
-    never call this helper.
+    Kept as a function (instead of removing it) so the assessment, report and
+    chat scoping call sites stay unchanged.
     """
-    from patients.models import PatientAssignment, PatientProfile
+    from patients.models import PatientProfile
 
-    created = set(
-        PatientProfile.objects.filter(created_by=user).values_list("id", flat=True)
-    )
-    assigned = set(
-        PatientAssignment.objects.filter(healthcare_worker=user).values_list("patient_id", flat=True)
-    )
-    return created | assigned
+    return set(PatientProfile.objects.values_list("id", flat=True))
 
 
 def can_access_patient(user, patient_profile):
-    """Admins: all patients. Workers: patients they created or that are
-    explicitly assigned to them. Anything else is denied."""
+    """Admins: all patients (PII-redacted at the serializer layer). Workers:
+    all patients. Anything else is denied."""
     if not (user and user.is_authenticated):
         return False
-    if user.role == "ADMIN":
-        return True
-    if user.role == "HEALTHCARE_WORKER":
-        from patients.models import PatientAssignment
-
-        if patient_profile.created_by_id == user.id:
-            return True
-        return PatientAssignment.objects.filter(
-            healthcare_worker=user, patient=patient_profile
-        ).exists()
-    return False
+    return user.role in ("ADMIN", "HEALTHCARE_WORKER")
 
 
 def scoped_patient_queryset(user):
