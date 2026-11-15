@@ -47,16 +47,18 @@
 
 ### Full production pipeline (`extract()` — Tesseract primary + CLAHE variant + crop re-read + EasyOCR cross-engine)
 
-| | Field acc | Flagged | Dangerous | Latency |
+| | Field acc | Dangerous | Per template | Latency |
 |---|---|---|---|---|
-| Before fixes (12-card sample, pre-fix code) | 93.8 % lab / 95.8 % synthetic, 13–59 s | — | age 520, BMI 221 cases | ~26 s |
-| **After (all 80 held-out cards)** | see §5 | — | — | — |
+| Before fixes (12-card sample, pre-fix code) | 93.8 % lab / 95.8 % synthetic | age 520, BMI 221 cases | — | ~26 s |
+| **After — all 80 held-out cards** | **100.0 % (640/640)** | **0** | lab / municipal / medicare / clinical all 1.00 | 17.5 s/card |
 
 ## 5. Honest assessment
 
+- The production pipeline now extracts **all 640 fields correctly on the 80 held-out cards, with zero silent errors**. That number is real and reproducible (command in §6) — but it is a **clean-render corpus**; it does not measure phone-photo robustness (see limitations).
 - The large, reproducible win is the **parser + line reconstruction + cascade fixes** (EasyOCR 81.7→98.4 %, Tesseract 94.4→95.2 %, pipeline crashes eliminated). These numbers are measured, not estimated.
 - **The fine-tuned recognizer did not beat the stock model at page level** (96.7 % vs 98.4 %) even though it clearly improved crop-level accuracy (86.6→92.7 %). It ships **opt-in only** (`OCR_EASYOCR_RECOG_NETWORK=aimhra_report`); the stock model remains the default. The training harness works and is documented so it can be re-run with more diverse data.
-- All remaining errors in the fixed pipeline are **missing values (never silently wrong ones)** on 4 of 80 cards — mostly fields whose text EasyOCR's detector never proposed. Recognition training cannot fix detection gaps; a VLM stage (already scaffolded, off by default) is the next lever.
+- All remaining single-engine errors are **missing values (never silently wrong ones)** — mostly fields whose text EasyOCR's detector never proposed; the production pipeline recovers all of them on this corpus. Recognition training cannot fix detection gaps; a VLM stage (already scaffolded, off by default) is the next lever.
+- Latency of the full cascade is **17.5 s/card on this machine** (Tesseract passes + EasyOCR GPU + crop re-read). Most of the accuracy win comes from the parser/line fixes; if throughput matters, the fast Tesseract pass alone (4.5 s) is only ~95 % accurate, while a single EasyOCR pass (6.5 s, GPU) reaches 98.4 %.
 - The corpus is **clean 150-dpi renders of vector PDFs** — real phone photos will score lower; there is no labeled real-photo set in the repo to measure that honestly.
 - Results are template-specific (these four layouts). No claims are made about unseen report formats.
 

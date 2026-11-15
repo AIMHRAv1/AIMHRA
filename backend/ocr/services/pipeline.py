@@ -26,6 +26,35 @@ logger = logging.getLogger(__name__)
 # Fields whose regex result is considered solid enough to skip extra passes.
 CONFIDENT_THRESHOLD = 0.85
 
+# Small-integer readings are re-verified even when plausible: digit misreads
+# ("6" read as "3" at 0.92 confidence) hide exactly there, and a one-digit
+# value carries no redundancy that would catch the swap. 3-digit values
+# (heart rate, blood pressure) keep the plain confidence gate.
+REVERIFY_MAX_DIGITS = 2
+REVERIFY_CONF = 0.95
+
+
+def _needs_reverification(entry):
+    """True when a field reading is plausible but not certain enough to skip
+    a second look: integer values of 1-2 digits below REVERIFY_CONF, read by
+    the OCR text path (QR/reread/LLM values are already trusted/verified)."""
+    if not isinstance(entry, dict):
+        return False
+    value = entry.get("value")
+    if value is None or entry.get("valid") is False:
+        return False
+    source = str(entry.get("source", ""))
+    if not source.startswith(("tesseract", "regex", "pymupdf", "clahe")):
+        return False
+    try:
+        if not float(value).is_integer():
+            return False  # decimals carry a self-checking decimal point
+    except (TypeError, ValueError):
+        return False
+    if len(str(int(value))) > REVERIFY_MAX_DIGITS:
+        return False
+    return float(entry.get("confidence") or 0) < REVERIFY_CONF
+
 
 def _png_for_vlm(content):
     """Preprocessed PNG copy of the page for the optional VLM stage. Returns
@@ -390,6 +419,7 @@ def extract(file_type, content):
             or fields[name].get("value") is None
             or fields[name].get("valid") is False
             or float(fields[name].get("confidence") or 0) < CONFIDENT_THRESHOLD
+            or _needs_reverification(fields[name])
         ]
 
     passes_ran = [best["pass"]]
@@ -421,6 +451,11 @@ def extract(file_type, content):
             if processed_img is not None:
                 try:
                     reread = _reread_fields(best_lines, processed_img, still_wanted)
+                    for _n, _e in reread.items():
+                        try:
+                            validate.validate_fields({_n: _e})
+                        except Exception:
+                            logger.exception("Validation of reread field %s failed", _n)
                     if reread:
                         passes_ran.append("reread")
                 except Exception:
@@ -452,10 +487,6 @@ def extract(file_type, content):
                     # MISSING: targeted crop re-read wins, else cross-engine.
                     if rr is not None:
                         fields[name] = dict(rr)
-                        try:
-                            validate.validate_fields({name: fields[name]})
-                        except Exception:
-                            logger.exception("Validation of reread field %s failed", name)
                         fields[name]["source"] = "reread"
                         warnings.append(f"Field {name} was recovered from a crop re-read — verify.")
                     elif ez is not None:
@@ -467,13 +498,8 @@ def extract(file_type, content):
                     # crop re-read, else with a plausible EasyOCR value.
                     # Displaced value stays as a candidate; field stays amber.
                     adopted = False
-                    if rr is not None:
-                        rr_entry = dict(rr)
-                        try:
-                            validate.validate_fields({name: rr_entry})
-                        except Exception:
-                            logger.exception("Validation of reread field %s failed", name)
-                        adopted = _adopt_invalid(fields, warnings, name, rr_entry, "reread")
+                    if rr is not None and rr.get("valid", False):
+                        adopted = _adopt_invalid(fields, warnings, name, rr, "reread")
                     if not adopted and ez_valid:
                         adopted = _adopt_invalid(fields, warnings, name, ez, "EasyOCR")
                     if not adopted:
@@ -483,31 +509,30 @@ def extract(file_type, content):
                             _merge_candidate(fields, warnings, name, ez, raw_text="")
                     continue
 
-                # Plausible but low confidence: only replace when BOTH
-                # deterministic sources agree on a different value; a single
-                # contradicting source is recorded as a red-flag candidate.
-                rr_val = rr.get("value") if rr else None
-                agree_rr = rr_val is not None and _same_value(rr_val, existing.get("value"))
-                agree_ez = ez_valid and _same_value(ez.get("value"), existing.get("value"))
-                if agree_rr or agree_ez:
-                    existing.setdefault("also_found_by", []).append(
-                        "reread" if agree_rr else "easyocr")
-                    existing["confidence"] = max(float(existing.get("confidence") or 0), 0.9)
-                    continue
-                both_agree = (
-                    rr_val is not None and ez_valid
-                    and _same_value(rr_val, ez.get("value"))
-                    and not _same_value(rr_val, existing.get("value"))
-                )
-                if both_agree:
+                # Plausible but low confidence (or an unverified small integer):
+                # replace ONLY when both deterministic sources agree on a
+                # different plausible value; a corroborated reading keeps its
+                # value with raised confidence; any split decision is surfaced
+                # as a red flag with the candidates instead of silently
+                # keeping one side.
+                rr_valid = bool(rr and rr.get("value") is not None and rr.get("valid", False))
+                rr_same = rr_valid and _same_value(rr.get("value"), existing.get("value"))
+                rr_diff = rr_valid and not rr_same
+                ez_same = ez_valid and _same_value(ez.get("value"), existing.get("value"))
+                ez_diff = ez_valid and not ez_same
+
+                if rr_diff and ez_diff and _same_value(rr.get("value"), ez.get("value")):
                     _adopt_invalid(
-                        fields, warnings, name, {**rr, "valid": True},
-                        "reread+EasyOCR", require_invalid=False,
+                        fields, warnings, name, rr, "reread+EasyOCR", require_invalid=False,
                     )
+                elif (rr_same or ez_same) and not (rr_diff or ez_diff):
+                    existing.setdefault("also_found_by", []).append(
+                        "reread" if rr_same else "easyocr")
+                    existing["confidence"] = max(float(existing.get("confidence") or 0), 0.9)
                 else:
-                    if rr_val is not None and not _same_value(rr_val, existing.get("value")):
+                    if rr_diff:
                         _merge_candidate(fields, warnings, name, rr, raw_text="")
-                    if ez_valid and not _same_value(ez.get("value"), existing.get("value")):
+                    if ez_diff:
                         _merge_candidate(fields, warnings, name, ez, raw_text="")
 
     # Re-validate after merging so cross-field rules (dia<sys) still hold.

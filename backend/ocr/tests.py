@@ -354,3 +354,45 @@ class EasyOcrLineGroupingTests(TestCase):
         self.assertEqual(len(lines), 2)
         self.assertEqual(lines[0]["text"], "BLOOD PRESSURE 144 / 92 mmHg 140 / 90")
         self.assertEqual(lines[1]["text"], "BODY MASS INDEX 22.1")
+
+
+class ReverificationTests(TestCase):
+    """Small-integer readings below 95% confidence get a second look even
+    when plausible — a lone "6" read as "3" at 0.92 used to beat the 0.85
+    cascade threshold and pass silently (report 132_medicare bug)."""
+
+    def _run(self, entry):
+        from ocr.services.pipeline import _needs_reverification
+
+        return _needs_reverification(entry)
+
+    def test_single_digit_low_confidence_is_reverified(self):
+        self.assertTrue(self._run(
+            {"value": 3, "confidence": 0.916, "source": "tesseract", "valid": True}))
+
+    def test_two_digit_integer_is_reverified(self):
+        self.assertTrue(self._run(
+            {"value": 41, "confidence": 0.90, "source": "tesseract", "valid": True}))
+
+    def test_decimal_value_skips_reverification(self):
+        self.assertFalse(self._run(
+            {"value": 5.8, "confidence": 0.9, "source": "tesseract", "valid": True}))
+
+    def test_three_digit_value_skips_reverification(self):
+        self.assertFalse(self._run(
+            {"value": 161, "confidence": 0.9, "source": "tesseract", "valid": True}))
+
+    def test_high_confidence_skips_reverification(self):
+        self.assertFalse(self._run(
+            {"value": 6, "confidence": 0.98, "source": "tesseract", "valid": True}))
+
+    def test_qr_and_reread_sources_skip_reverification(self):
+        self.assertFalse(self._run(
+            {"value": 6, "confidence": 0.9, "source": "qr", "valid": True}))
+        self.assertFalse(self._run(
+            {"value": 6, "confidence": 0.9, "source": "reread", "valid": True}))
+
+    def test_invalid_or_missing_value_skips(self):
+        self.assertFalse(self._run(
+            {"value": 3, "confidence": 0.9, "source": "tesseract", "valid": False}))
+        self.assertFalse(self._run({"value": None, "confidence": 0.9, "source": "tesseract"}))

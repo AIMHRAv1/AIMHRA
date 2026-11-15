@@ -294,8 +294,10 @@ input:focus, textarea:focus, select:focus { outline: 2px solid #9cc3d2; border-c
 
 /* --- OCR scan mode (assessment form) --- */
 .mode-toggle { display: flex; gap: 8px; flex-wrap: wrap; }
-.scan-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 16px; align-items: start; }
-.scan-sidebar { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+/* scanned image + extraction details sit on the LEFT, form on the right
+   (DOM order unchanged: form first, sidebar lifted via order) */
+.scan-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+.scan-sidebar { display: flex; flex-direction: column; gap: 12px; min-width: 0; order: -1; }
 .scan-preview { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
 .scan-preview img { display: block; max-width: 100%; height: auto; }
 .field-badge {
@@ -308,8 +310,13 @@ input:focus, textarea:focus, select:focus { outline: 2px solid #9cc3d2; border-c
 .field-warning { display: block; color: var(--mid); font-size: 0.72rem; margin-top: 2px; }
 @media (max-width: 900px) {
   .scan-layout { grid-template-columns: 1fr; }
+  .scan-sidebar { order: 0; } /* stacked view keeps the form on top */
 }
 
-.field-crop-row { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
-.field-crop { height: 34px; border: 1px solid var(--line); border-radius: 4px; }
+.field-crop-row { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex: 1 1 0%; min-width: 0; }
+.field-crop-row > * { min-width: 0; }
+.field-crop-row .checked-label { flex-shrink: 0; }
+/* width:0 + flex-grow keeps the crop's intrinsic pixel width out of every
+   auto/flex track up the chain (grid 1fr tracks have auto minimums) */
+.field-crop { display: block; flex: 1 1 0%; width: 0; min-width: 0; max-height: 34px; object-fit: contain; border: 1px solid var(--line); border-radius: 4px; }
 .checked-label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
