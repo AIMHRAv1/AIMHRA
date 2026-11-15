@@ -27,6 +27,7 @@ class Assessment(models.Model):
     fasting_glucose = models.FloatField()
     # Fixed vocabulary of self-reported symptoms (rule-engine input).
     symptoms = models.JSONField(default=list, blank=True)
+    recommendations = models.JSONField(default=dict, blank=True)
     notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -81,8 +82,8 @@ class Alert(models.Model):
         "patients.PatientProfile", on_delete=models.CASCADE, related_name="alerts"
     )
     category = models.CharField(max_length=16, choices=CATEGORY_CHOICES)
-    rule_id = models.CharField(max_length=64, blank=True, default="")
-    rule_description = models.CharField(max_length=255, blank=True, default="")
+    rule_id = models.TextField(blank=True, default="")
+    rule_description = models.TextField(blank=True, default="")
     message = models.TextField()
     rules_version = models.CharField(max_length=16, default="v1")
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="OPEN")

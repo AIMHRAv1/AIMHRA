@@ -109,29 +109,56 @@ class AdminPatientHistoryView(APIView):
 
     def get(self, request, pk):
         from assessments.models import Assessment
+        from assessments.trends import compute_measurement_trends, compute_trend
+        from mlcore.constants import RISK_LEVEL_ORDER
 
         patient = get_object_or_404(PatientProfile, pk=pk)
         assessments = Assessment.objects.filter(patient=patient).select_related(
             "created_by", "prediction"
-        ).order_by("-visit_date", "-id")
+        ).order_by("visit_date", "id")
+        history = []
+        risk_history = []
+        for assessment in assessments:
+            prediction = getattr(assessment, "prediction", None)
+            item = {
+                "id": assessment.id,
+                "visit_date": assessment.visit_date.isoformat(),
+                "risk_level": prediction.risk_level if prediction else None,
+                "recommendations": assessment.recommendations,
+                "assessed_by": (
+                    assessment.created_by.full_name or assessment.created_by.username
+                    if assessment.created_by else None
+                ),
+                "systolic_bp": assessment.systolic_bp,
+                "diastolic_bp": assessment.diastolic_bp,
+                "heart_rate": assessment.heart_rate,
+                "body_temperature": assessment.body_temperature,
+                "bmi": assessment.bmi,
+                "hba1c": assessment.hba1c,
+                "fasting_glucose": assessment.fasting_glucose,
+            }
+            history.append(item)
+            if item["risk_level"] is not None:
+                risk_history.append({"risk_level": item["risk_level"]})
+
+        trend = compute_trend(risk_history)
+        if trend["current"] is None:
+            trend["change"] = "unavailable"
+        elif trend["previous"] is not None:
+            change = RISK_LEVEL_ORDER[trend["current"]] - RISK_LEVEL_ORDER[trend["previous"]]
+            trend["change"] = "increased" if change > 0 else ("decreased" if change < 0 else "unchanged")
+        else:
+            trend["change"] = "baseline"
+
         return ok({
             "patient": {
                 "id": patient.id,
                 "patient_code": patient.patient_code,
                 "assessment_count": assessments.count(),
             },
-            "assessments": [
-                {
-                    "id": assessment.id,
-                    "visit_date": assessment.visit_date.isoformat(),
-                    "risk_level": getattr(assessment.prediction, "risk_level", None),
-                    "assessed_by": (
-                        assessment.created_by.full_name or assessment.created_by.username
-                        if assessment.created_by else None
-                    ),
-                }
-                for assessment in assessments
-            ],
+            "assessments": history,
+            "trend": trend,
+            "measurement_trends": compute_measurement_trends(history),
         })
 
 

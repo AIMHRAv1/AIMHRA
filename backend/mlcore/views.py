@@ -24,24 +24,28 @@ class ModelComparisonView(APIView):
 
     def get(self, request):
         comparison = []
-        for name in ("RandomForest", "XGBoost"):
+        for name in ("DecisionTree", "RandomForest", "XGBoost"):
             row = ModelVersion.objects.filter(name=name).order_by("-trained_at").first()
             if row:
-                m = row.metrics or {}
+                validation_metrics = row.validation_metrics or {}
+                test_metrics = row.metrics or {}
                 comparison.append(
                     {
                         "id": row.id,
                         "model": row.name,
                         "version": row.version,
                         "status": row.status,
-                        "accuracy": m.get("accuracy"),
-                        "precision": m.get("precision_macro"),
-                        "recall": m.get("recall_macro"),
-                        "f1": m.get("f1_macro"),
-                        "roc_auc": m.get("roc_auc_ovr_macro"),
-                        "high_risk_recall": m.get("high_risk_recall"),
-                        "per_class": m.get("per_class"),
-                        "confusion_matrix": m.get("confusion_matrix"),
+                        "metrics_split": "validation",
+                        "accuracy": validation_metrics.get("accuracy"),
+                        "precision": validation_metrics.get("precision_macro"),
+                        "recall": validation_metrics.get("recall_macro"),
+                        "f1": validation_metrics.get("f1_macro"),
+                        "roc_auc": validation_metrics.get("roc_auc_ovr_macro"),
+                        "high_risk_recall": validation_metrics.get("high_risk_recall"),
+                        "per_class": validation_metrics.get("per_class"),
+                        "confusion_matrix": validation_metrics.get("confusion_matrix"),
+                        "validation_metrics": validation_metrics,
+                        "test_metrics": test_metrics if row.status == "PRODUCTION" and test_metrics else None,
                     }
                 )
         production = ModelVersion.objects.filter(status="PRODUCTION").first()

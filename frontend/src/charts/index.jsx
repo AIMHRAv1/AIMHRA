@@ -9,7 +9,7 @@ const RISK_VALUE = { 'low risk': 0, 'mid risk': 1, 'high risk': 2 }
 
 /** Risk-category progression across stored visits. */
 export function RiskTrendChart({ series }) {
-  const data = (series || []).map((s, i) => ({
+  const data = (series || []).filter((s) => s.risk_level).map((s, i) => ({
     name: s.gestational_week != null ? `Wk ${s.gestational_week}` : `Visit ${i + 1}`,
     date: s.visit_date,
     level: RISK_VALUE[s.risk_level] ?? 0,
@@ -28,6 +28,41 @@ export function RiskTrendChart({ series }) {
         <Line type="stepAfter" dataKey="level" stroke="#1f6f8b" strokeWidth={2.5} dot={{ r: 4 }} isAnimationActive={false} />
       </LineChart>
     </ResponsiveContainer>
+  )
+}
+
+/** Stored clinical measurements across chronological assessments. */
+export function MeasurementTrendChart({ series, title, measurements }) {
+  const data = (series || []).map((visit) => ({
+    date: visit.visit_date,
+    ...Object.fromEntries(measurements.map(({ key }) => [key, visit[key] ?? null])),
+  }))
+  const colors = ['#1f6f8b', '#c0392b']
+  return (
+    <div className="card">
+      <h3 className="section-title">{title}</h3>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e3e8ec" />
+          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} />
+          <Tooltip />
+          <Legend />
+          {measurements.map((measurement, index) => (
+            <Line
+              key={measurement.key}
+              type="monotone"
+              dataKey={measurement.key}
+              name={measurement.label}
+              stroke={colors[index % colors.length]}
+              connectNulls={false}
+              dot={{ r: 3 }}
+              isAnimationActive={false}
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -110,7 +145,7 @@ export function ConfusionMatrix({ matrix }) {
   )
 }
 
-/** Metric comparison bars for RF vs XGB. */
+/** Validation metric comparison across candidate classifiers. */
 export function MetricBars({ models }) {
   const metrics = ['accuracy', 'precision', 'recall', 'f1', 'roc_auc', 'high_risk_recall']
   const labels = { accuracy: 'Accuracy', precision: 'Precision', recall: 'Recall', f1: 'F1', roc_auc: 'ROC-AUC', high_risk_recall: 'High-risk recall' }

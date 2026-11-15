@@ -11,6 +11,7 @@ backend/logs/
 backend/staticfiles/
 backend/media/
 backend/ml_artifacts/
+backend/rag_artifacts/
 
 # Data generated at runtime (keep the dataset + dataset_report)
 backend/data/synthetic_*.csv

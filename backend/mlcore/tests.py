@@ -4,8 +4,12 @@ import numpy as np
 from django.conf import settings
 from django.test import TestCase
 
-from mlcore.constants import FEATURES, RISK_LEVELS, SAFE_FEATURES, LEAKAGE_FEATURES, UNUSED_FEATURES
+from mlcore.constants import (
+    FEATURES, FEATURE_LABELS, RISK_LEVELS, SAFE_FEATURES,
+    LEAKAGE_FEATURES, UNUSED_FEATURES,
+)
 from mlcore.dataset import clean_dataset, feature_matrix, load_raw_dataset, validate_dataset
+from mlcore.evaluation import selection_score
 from mlcore.models import ModelVersion
 from mlcore.preprocessing import Preprocessor
 from mlcore.training import train_all
@@ -29,9 +33,24 @@ class DatasetTests(TestCase):
     def test_cleaning_only_removes_documented_rows(self):
         df = load_raw_dataset(DATASET)
         clean, stats = clean_dataset(df)
-        self.assertLess(stats["rows_out"], stats["rows_in"])
-        self.assertGreater(stats["rows_out"], 5000)
-        self.assertGreaterEqual(stats["exact_duplicates_dropped"], 1)
+        self.assertEqual(stats["rows_in"], 6103)
+        self.assertEqual(stats["exact_duplicates_dropped"], 0)
+        self.assertEqual(stats["implausible_rows_dropped_total"], 45)
+        self.assertEqual(stats["rows_out"], 6058)
+        self.assertEqual(len(clean), 6058)
+
+    def test_identical_clinical_records_with_different_identifiers_are_retained(self):
+        df = load_raw_dataset(DATASET)
+        duplicate_mask = df.duplicated(subset=FEATURES + ["risk_level"], keep=False)
+        duplicates = df.loc[duplicate_mask]
+        self.assertEqual(len(duplicates), 2)
+        self.assertEqual(duplicates["Patient ID"].nunique(), 2)
+        self.assertEqual(duplicates["Name"].nunique(), 2)
+
+        clean, stats = clean_dataset(df)
+        retained = clean.loc[clean.index.isin(duplicates.index)]
+        self.assertEqual(len(retained), 2)
+        self.assertEqual(stats["exact_duplicates_dropped"], 0)
 
     def test_identifiers_are_not_features(self):
         # Leakage prevention contract: no identifiers in the feature matrix.
@@ -41,7 +60,13 @@ class DatasetTests(TestCase):
         self.assertNotIn("Patient ID", SAFE_FEATURES)
         self.assertNotIn("Name", SAFE_FEATURES)
         self.assertIn("Patient ID", UNUSED_FEATURES)
+        self.assertNotIn("Patient ID", FEATURES)
+        self.assertNotIn("Name", FEATURES)
         self.assertEqual(LEAKAGE_FEATURES, [])
+
+    def test_glucose_feature_units_are_explicit(self):
+        self.assertEqual(FEATURE_LABELS["hba1c"], "HbA1c (mmol/mol)")
+        self.assertEqual(FEATURE_LABELS["fasting_glucose"], "Fasting blood glucose (mmol/L)")
 
 
 class PreprocessingTests(TestCase):
@@ -72,7 +97,7 @@ class TrainingAndPredictionTests(TestCase):
         import pathlib
 
         outcome = train_all(DATASET, settings.ML_ARTIFACTS_DIR, quick=True)
-        best = max(outcome["results"], key=lambda r: r["test_metrics"]["f1_macro"])
+        best = next(r for r in outcome["results"] if r["name"] == outcome["selected_model"])
         for r in outcome["results"]:
             ModelVersion.objects.create(
                 name=r["name"],
@@ -80,7 +105,8 @@ class TrainingAndPredictionTests(TestCase):
                 dataset_version=outcome["dataset_md5"],
                 features=r["bundle"]["features"],
                 training_config={"quick": True},
-                metrics=r["test_metrics"],
+                metrics=r["test_metrics"] or {},
+                validation_metrics=r["validation_metrics"],
                 artifact_path=str(r["artifact_path"]),
                 status="PRODUCTION" if r is best else "CANDIDATE",
             )
@@ -89,8 +115,41 @@ class TrainingAndPredictionTests(TestCase):
         from mlcore.registry import get_production_bundle
 
         bundle, row = get_production_bundle()
-        self.assertIn(bundle["model_name"], ("RandomForest", "XGBoost"))
+        self.assertIn(bundle["model_name"], ("DecisionTree", "RandomForest", "XGBoost"))
         self.assertEqual(bundle["classes"], RISK_LEVELS)
+
+    def test_validation_selects_models_and_only_selected_model_has_test_metrics(self):
+        outcome = train_all(
+            DATASET,
+            settings.ML_ARTIFACTS_DIR,
+            quick=True,
+            selection_criterion=settings.MODEL_SELECTION_CRITERION,
+        )
+        self.assertEqual(
+            {result["name"] for result in outcome["results"]},
+            {"DecisionTree", "RandomForest", "XGBoost"},
+        )
+        selected = next(r for r in outcome["results"] if r["name"] == outcome["selected_model"])
+        expected = max(
+            outcome["results"],
+            key=lambda r: selection_score(
+                r["validation_metrics"], settings.MODEL_SELECTION_CRITERION
+            ),
+        )
+        self.assertIs(selected, expected)
+        self.assertEqual(outcome["selected_test_metrics"], selected["test_metrics"])
+        for result in outcome["results"]:
+            self.assertIsNotNone(result["validation_metrics"])
+            if result is selected:
+                self.assertIsNotNone(result["test_metrics"])
+                for metric in (
+                    "accuracy", "precision_macro", "recall_macro", "f1_macro",
+                    "roc_auc_ovr_macro", "high_risk_recall", "per_class", "confusion_matrix",
+                ):
+                    self.assertIn(metric, result["test_metrics"])
+                self.assertIn("high risk", result["test_metrics"]["per_class"])
+            else:
+                self.assertIsNone(result["test_metrics"])
 
     def test_prediction_shape_and_labels(self):
         from mlcore.registry import predict

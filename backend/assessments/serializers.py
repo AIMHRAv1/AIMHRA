@@ -23,7 +23,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
         fields = [
             "id", "patient", "patient_code", "patient_name", "visit_date", "gestational_week", "age", "body_temperature",
             "heart_rate", "systolic_bp", "diastolic_bp", "bmi", "hba1c", "fasting_glucose",
-            "symptoms", "notes", "created_at", "assessed_by", "prediction",
+            "symptoms", "recommendations", "notes", "created_at", "assessed_by", "prediction",
         ]
         read_only_fields = ["id", "patient", "created_at", "prediction"]
 

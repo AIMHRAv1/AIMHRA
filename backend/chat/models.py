@@ -5,7 +5,8 @@ from django.db import models
 class ChatSession(models.Model):
     title = models.CharField(max_length=128, blank=True, default="New conversation")
     patient = models.ForeignKey(
-        "patients.PatientProfile", on_delete=models.CASCADE, related_name="chat_sessions"
+        "patients.PatientProfile", null=True, blank=True,
+        on_delete=models.CASCADE, related_name="chat_sessions"
     )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="chat_sessions"
@@ -32,7 +33,7 @@ class ChatMessage(models.Model):
         max_length=24,
         blank=True,
         default="",
-        help_text="llm | rag_only_fallback | escalation | no_llm_configured",
+        help_text="llm | rag_only_fallback | escalation | no_llm_configured | no_relevant_context",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

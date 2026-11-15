@@ -1,4 +1,4 @@
-"""Evaluation utilities. Models are evaluated on the held-out test split only."""
+"""Classification metrics shared by validation comparison and final test reporting."""
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,

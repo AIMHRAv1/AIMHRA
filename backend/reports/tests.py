@@ -25,12 +25,13 @@ class ReportTests(TestCase):
 
         outcome = train_all(settings.BASE_DIR / "data" / "Mathernal_Risk.csv",
                             settings.ML_ARTIFACTS_DIR, quick=True)
-        best = max(outcome["results"], key=lambda r: r["test_metrics"]["f1_macro"])
+        best = next(r for r in outcome["results"] if r["name"] == outcome["selected_model"])
         for r in outcome["results"]:
             ModelVersion.objects.create(
                 name=r["name"], version=f"rep-{r['name'][:3].lower()}",
                 dataset_version=outcome["dataset_md5"], features=r["bundle"]["features"],
-                training_config={"quick": True}, metrics=r["test_metrics"],
+                training_config={"quick": True}, metrics=r["test_metrics"] or {},
+                validation_metrics=r["validation_metrics"],
                 artifact_path=str(r["artifact_path"]),
                 status="PRODUCTION" if r is best else "CANDIDATE",
             )

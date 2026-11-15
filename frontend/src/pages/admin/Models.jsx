@@ -39,7 +39,7 @@ export default function AdminModels() {
       <header className="page-head">
         <div>
           <h1>Model management</h1>
-          <p className="muted">Random Forest vs XGBoost, evaluated on the held-out test split.</p>
+          <p className="muted">Decision Tree, Random Forest and XGBoost are compared on validation data. The test set is reported only for the selected production model.</p>
         </div>
       </header>
 
@@ -52,7 +52,7 @@ export default function AdminModels() {
       </div>
 
       <div className="card">
-        <h2 className="section-title">Test-split comparison</h2>
+        <h2 className="section-title">Validation-split comparison</h2>
         <MetricBars models={compare.models} />
         <table className="data-table">
           <thead><tr><th>Model</th><th>Version</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>ROC-AUC</th><th>High-risk recall</th><th>Status</th><th></th></tr></thead>
@@ -78,16 +78,53 @@ export default function AdminModels() {
             ))}
           </tbody>
         </table>
-        <p className="muted small">High-risk recall is the primary criterion: missing a genuinely high-risk pregnancy is the costliest error.</p>
+        <p className="muted small">Validation results select the model; high-risk recall is prioritized. The test set is not used for model selection.</p>
       </div>
 
       <div className="grid-2-cards">
         {compare.models.filter((m) => m.confusion_matrix).map((m) => (
           <div className="card" key={m.id}>
-            <h2 className="section-title">Confusion matrix — {m.model} (test)</h2>
+            <h2 className="section-title">Confusion matrix — {m.model} (validation)</h2>
             <ConfusionMatrix matrix={m.confusion_matrix} />
           </div>
         ))}
+        {production && compare.models.find((m) => m.id === production.id)?.test_metrics && (
+          <div className="card">
+            <h2 className="section-title">Final test results — {production.model}</h2>
+            {(() => {
+              const metrics = compare.models.find((m) => m.id === production.id).test_metrics
+              return (
+                <>
+                  <p>
+                    Accuracy {(metrics.accuracy * 100).toFixed(1)}% ·
+                    Precision {(metrics.precision_macro * 100).toFixed(1)}% ·
+                    Recall {(metrics.recall_macro * 100).toFixed(1)}% ·
+                    F1 {(metrics.f1_macro * 100).toFixed(1)}% ·
+                    High-risk recall {(metrics.high_risk_recall * 100).toFixed(1)}% ·
+                    ROC-AUC {metrics.roc_auc_ovr_macro != null ? (metrics.roc_auc_ovr_macro * 100).toFixed(1) + '%' : '—'}
+                  </p>
+                  {metrics.confusion_matrix && <ConfusionMatrix matrix={metrics.confusion_matrix} />}
+                  {metrics.per_class && (
+                    <table className="data-table">
+                      <thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead>
+                      <tbody>
+                        {Object.entries(metrics.per_class).map(([label, row]) => (
+                          <tr key={label}>
+                            <td>{label}</td>
+                            <td>{(row.precision * 100).toFixed(1)}%</td>
+                            <td>{(row.recall * 100).toFixed(1)}%</td>
+                            <td>{(row.f1 * 100).toFixed(1)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  <p className="muted small">Final held-out test metrics are reported for the selected model only.</p>
+                </>
+              )
+            })()}
+          </div>
+        )}
         {importance && (
           <div className="card">
             <h2 className="section-title">Global feature importance — production</h2>

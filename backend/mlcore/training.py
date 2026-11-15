@@ -1,10 +1,10 @@
-"""Training pipeline: stratified split -> fit preprocessing -> train RF & XGB
--> evaluate on test only -> persist artifacts -> register versions.
+"""Training pipeline: stratified split -> fit preprocessing on train ->
+train DT/RF/XGB -> select on validation -> evaluate the selected model on test.
 
 Class imbalance note: the dataset is close to balanced (32.8% / 33.5% / 33.7%),
 so resampling (SMOTE) is unnecessary and would only inject synthetic noise.
-Both models still use class weights as a safeguard; the decision is recorded
-in the training config stored on each ModelVersion row.
+The tree models use class weights as a safeguard; the decision is recorded in
+the training config stored on each ModelVersion row.
 """
 import json
 import logging
@@ -13,9 +13,12 @@ from datetime import datetime, timezone
 
 import joblib
 import numpy as np
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
+
+from django.conf import settings
 
 from mlcore import evaluation as ev
 from mlcore.constants import FEATURES, PLAUSIBILITY_RANGES, RISK_LEVELS, RISK_LEVEL_ORDER
@@ -37,6 +40,14 @@ def _make_random_forest():
     )
 
 
+def _make_decision_tree():
+    return DecisionTreeClassifier(
+        min_samples_leaf=2,
+        class_weight="balanced",
+        random_state=RANDOM_STATE,
+    )
+
+
 def _make_xgboost():
     return XGBClassifier(
         n_estimators=400,
@@ -51,7 +62,11 @@ def _make_xgboost():
 
 
 def build_models():
-    return {"RandomForest": _make_random_forest(), "XGBoost": _make_xgboost()}
+    return {
+        "DecisionTree": _make_decision_tree(),
+        "RandomForest": _make_random_forest(),
+        "XGBoost": _make_xgboost(),
+    }
 
 
 TRAIN_CONFIG = {
@@ -62,20 +77,23 @@ TRAIN_CONFIG = {
     },
     "preprocessing": "median imputation fitted on training split only",
     "models": {
+        "DecisionTree": {"min_samples_leaf": 2, "class_weight": "balanced"},
         "RandomForest": {"n_estimators": 400, "min_samples_leaf": 2, "class_weight": "balanced_subsample"},
         "XGBoost": {"n_estimators": 400, "learning_rate": 0.08, "max_depth": 6, "subsample": 0.9, "colsample_bytree": 0.8},
     },
-    "evaluation": "held-out test split only; high-risk recall prioritized for model selection",
+    "selection": "validation split only; high-risk recall prioritized, then macro F1 and ROC-AUC",
+    "final_evaluation": "selected model evaluated once on the held-out test split",
 }
 
 
-def train_all(dataset_path, artifacts_dir, quick=False):
+def train_all(dataset_path, artifacts_dir, quick=False, selection_criterion=None):
     """Run the full pipeline. `quick=True` trains tiny models (used by tests
     and smoke checks, never registered as production)."""
     import pathlib
 
     artifacts_dir = pathlib.Path(artifacts_dir)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
+    criterion = selection_criterion or settings.MODEL_SELECTION_CRITERION
 
     md5 = dataset_md5(dataset_path)
     raw = load_raw_dataset(dataset_path)
@@ -89,8 +107,7 @@ def train_all(dataset_path, artifacts_dir, quick=False):
     # probabilities always align with the canonical class list (both models).
     y_enc = np.array([RISK_LEVEL_ORDER[v] for v in y])
 
-    # Stratified 70/15/15 split. Validation is used only for training-time
-    # sanity checks; all reported metrics come from the test split.
+    # Keep the test split reserved until the validation-selected model is fixed.
     X_trainval, X_test, y_trainval, y_test = train_test_split(
         X, y_enc, test_size=0.15, stratify=y_enc, random_state=RANDOM_STATE
     )
@@ -102,16 +119,18 @@ def train_all(dataset_path, artifacts_dir, quick=False):
     preprocessor = Preprocessor().fit(X_train)
     X_train_p = preprocessor.transform(X_train)
     X_val_p = preprocessor.transform(X_val)
-    X_test_p = preprocessor.transform(X_test)
 
     # Human-readable labels for evaluation output.
     decode = np.array(RISK_LEVELS)
-    y_train_lbl, y_val_lbl, y_test_lbl = decode[y_train], decode[y_val], decode[y_test]
+    y_val_lbl = decode[y_val]
 
     results = []
     builders = build_models()
     if quick:
         builders = {
+            "DecisionTree": DecisionTreeClassifier(
+                min_samples_leaf=2, class_weight="balanced", random_state=RANDOM_STATE
+            ),
             "RandomForest": RandomForestClassifier(n_estimators=10, random_state=RANDOM_STATE, n_jobs=-1),
             "XGBoost": XGBClassifier(n_estimators=10, max_depth=3, tree_method="hist", random_state=RANDOM_STATE, eval_metric="mlogloss"),
         }
@@ -119,10 +138,9 @@ def train_all(dataset_path, artifacts_dir, quick=False):
     for name, model in builders.items():
         started = time.time()
         model.fit(X_train_p, y_train)
-        val_metrics = ev.evaluate_classifier(y_val_lbl, decode[model.predict(X_val_p)])
-        y_pred = decode[model.predict(X_test_p)]
-        y_proba = model.predict_proba(X_test_p)
-        test_metrics = ev.evaluate_classifier(y_test_lbl, y_pred, y_proba)
+        val_pred = decode[model.predict(X_val_p)]
+        val_proba = model.predict_proba(X_val_p)
+        val_metrics = ev.evaluate_classifier(y_val_lbl, val_pred, val_proba)
         train_seconds = round(time.time() - started, 2)
 
         artifact_path = artifacts_dir / f"{name.lower()}_{'quick' if quick else 'full'}.joblib"
@@ -136,9 +154,11 @@ def train_all(dataset_path, artifacts_dir, quick=False):
             "classes": RISK_LEVELS,
             "dataset_md5": md5,
             "trained_at": datetime.now(timezone.utc).isoformat(),
-            "train_config": TRAIN_CONFIG,
+            "train_config": {
+                **TRAIN_CONFIG,
+                "selection_criterion": criterion,
+            },
         }
-        joblib.dump(bundle, artifact_path)
 
         results.append(
             {
@@ -146,12 +166,34 @@ def train_all(dataset_path, artifacts_dir, quick=False):
                 "artifact_path": str(artifact_path),
                 "bundle": bundle,
                 "validation_metrics": val_metrics,
-                "test_metrics": test_metrics,
+                "test_metrics": None,
                 "train_seconds": train_seconds,
             }
         )
-        logger.info("%s trained in %ss | test f1_macro=%.4f high_risk_recall=%.4f",
-                    name, train_seconds, test_metrics["f1_macro"], test_metrics["high_risk_recall"])
+        logger.info(
+            "%s trained in %ss | validation f1_macro=%.4f high_risk_recall=%.4f",
+            name, train_seconds, val_metrics["f1_macro"], val_metrics["high_risk_recall"],
+        )
+
+    selected = max(
+        results,
+        key=lambda result: ev.selection_score(result["validation_metrics"], criterion),
+    )
+
+    # The test features and labels are first used after model selection.
+    X_test_p = preprocessor.transform(X_test)
+    y_test_lbl = decode[y_test]
+    selected_model = selected["bundle"]["model"]
+    test_pred = decode[selected_model.predict(X_test_p)]
+    test_proba = selected_model.predict_proba(X_test_p)
+    selected["test_metrics"] = ev.evaluate_classifier(y_test_lbl, test_pred, test_proba)
+    selected["bundle"]["selected_by_validation"] = True
+    joblib.dump(selected["bundle"], selected["artifact_path"])
+
+    for result in results:
+        if result is selected:
+            continue
+        joblib.dump(result["bundle"], result["artifact_path"])
 
     return {
         "dataset_md5": md5,
@@ -162,7 +204,10 @@ def train_all(dataset_path, artifacts_dir, quick=False):
             "validation": int(X_val.shape[0]),
             "test": int(X_test.shape[0]),
         },
-        "train_config": TRAIN_CONFIG,
+        "train_config": {**TRAIN_CONFIG, "selection_criterion": criterion},
         "plausibility_ranges": {k: list(v) for k, v in PLAUSIBILITY_RANGES.items()},
+        "selection_criterion": criterion,
+        "selected_model": selected["name"],
+        "selected_test_metrics": selected["test_metrics"],
         "results": results,
     }

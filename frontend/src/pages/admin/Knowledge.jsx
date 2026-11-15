@@ -8,7 +8,9 @@ export default function AdminKnowledge() {
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [form, setForm] = useState({ title: '', source_url: '', content_text: '' })
+  const [form, setForm] = useState({
+    title: '', issuing_organization: '', source_url: '', content_text: '',
+  })
   const [file, setFile] = useState(null)
   const [probe, setProbe] = useState('')
 
@@ -26,12 +28,13 @@ export default function AdminKnowledge() {
     try {
       const fd = new FormData()
       fd.append('title', form.title)
+      if (form.issuing_organization) fd.append('issuing_organization', form.issuing_organization)
       if (form.source_url) fd.append('source_url', form.source_url)
       if (file) fd.append('file', file)
       else fd.append('content_text', form.content_text)
       const d = await kbService.upload(fd)
       setNotice(`Indexed “${d.title}” — ${d.chunk_count} chunks.`)
-      setForm({ title: '', source_url: '', content_text: '' })
+      setForm({ title: '', issuing_organization: '', source_url: '', content_text: '' })
       setFile(null)
       await reload()
     } catch (err) { setNotice(apiError(err).message) } finally { setBusy(false) }
@@ -81,6 +84,8 @@ export default function AdminKnowledge() {
         <div className="grid-2">
           <label className="field"><span>Title</span>
             <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></label>
+          <label className="field"><span>Issuing organization (optional)</span>
+            <input value={form.issuing_organization} onChange={(e) => setForm({ ...form, issuing_organization: e.target.value })} /></label>
           <label className="field"><span>Source URL (optional provenance)</span>
             <input type="url" value={form.source_url} onChange={(e) => setForm({ ...form, source_url: e.target.value })} /></label>
         </div>
@@ -108,11 +113,12 @@ export default function AdminKnowledge() {
           <EmptyState title="No documents" hint="Upload clinical guidelines or education material to ground the assistant's answers." />
         ) : (
           <table className="data-table">
-            <thead><tr><th>Title</th><th>Source</th><th>Chunks</th><th>Indexed</th><th></th></tr></thead>
+            <thead><tr><th>Title</th><th>Issuing organization</th><th>Source</th><th>Chunks</th><th>Indexed</th><th></th></tr></thead>
             <tbody>
               {docs.map((d) => (
                 <tr key={d.id}>
                   <td>{d.title}</td>
+                  <td>{d.issuing_organization || <span className="muted">—</span>}</td>
                   <td>{d.source_url ? <a href={d.source_url} target="_blank" rel="noreferrer">link</a> : <span className="muted">—</span>}</td>
                   <td>{d.chunk_count}</td>
                   <td>{d.indexed_at ? new Date(d.indexed_at).toLocaleString() : 'not indexed'}</td>

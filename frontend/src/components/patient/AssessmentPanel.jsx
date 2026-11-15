@@ -3,6 +3,7 @@ import { apiError } from '../../api/client'
 import { assessmentService } from '../../services/auth'
 import { ShapBars } from '../../charts'
 import { CategoryBadge, Disclaimer, ErrorState, RiskBadge } from '../ui'
+import RecommendationsPanel from './RecommendationsPanel'
 
 const FIELDS = [
   { name: 'age', label: 'Age (years)', min: 14, max: 55, step: 1, hint: 'Calculated from the patient date of birth' },
@@ -11,8 +12,8 @@ const FIELDS = [
   { name: 'systolic_bp', label: 'Systolic blood pressure (mm Hg)', min: 70, max: 250, step: 1 },
   { name: 'diastolic_bp', label: 'Diastolic blood pressure (mm Hg)', min: 40, max: 150, step: 1 },
   { name: 'bmi', label: 'BMI (kg/m²)', min: 12, max: 60, step: 0.1 },
-  { name: 'hba1c', label: 'Blood glucose — HbA1c column (dataset units)', min: 20, max: 60, step: 0.1, hint: 'Observed dataset range 30–50' },
-  { name: 'fasting_glucose', label: 'Blood glucose — fasting column (dataset units)', min: 2, max: 20, step: 0.1, hint: 'Observed dataset range 3.5–8.9' },
+  { name: 'hba1c', label: 'HbA1c (mmol/mol)', min: 20, max: 60, step: 0.1, hint: 'Observed dataset range 30–50 mmol/mol' },
+  { name: 'fasting_glucose', label: 'Fasting blood glucose (mmol/L)', min: 2, max: 20, step: 0.1, hint: 'Observed dataset range 3.5–8.9 mmol/L' },
 ]
 
 const SYMPTOMS = [
@@ -166,7 +167,9 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
             ))}
           </div>
 
-          <h2 className="section-title">Symptoms since the last visit</h2>
+          <h2 className="section-title">
+            {patient?.assessment_count > 0 ? 'Symptoms since the last visit' : 'Symptoms at this visit'}
+          </h2>
           <div className="symptom-grid" role="group" aria-label="Symptoms">
             {SYMPTOMS.map(([code, label]) => (
               <label key={code} className={`symptom${form.symptoms.includes(code) ? ' selected' : ''}`}>
@@ -207,6 +210,13 @@ function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAs
         </div>
       )}
 
+      {result.prediction_status === 'unavailable' && (
+        <div className="alert alert-warning" role="alert">
+          <strong>ML prediction unavailable</strong>
+          <p>{result.prediction_message || 'The assessment and clinical rules were processed, but no ML risk classification was produced.'}</p>
+        </div>
+      )}
+
       <div className="card result-card">
         <div className="result-head">
           <div>
@@ -214,9 +224,11 @@ function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAs
               {patientLabel} · assessment on {result.assessment.visit_date}
               {result.assessment.assessed_by && <> · assessed by {result.assessment.assessed_by}</>}
             </div>
-            <RiskBadge level={result.risk_level} size="lg" />
+            {result.risk_level
+              ? <RiskBadge level={result.risk_level} size="lg" />
+              : <p className="muted">Risk classification unavailable</p>}
           </div>
-          <div className="result-probs">
+          {probs.length > 0 && <div className="result-probs">
             {probs.map(([level, p]) => (
               <div key={level} className={`prob-row ${level.replace(' ', '-')}`}>
                 <span>{level.replace(' risk', '')} risk</span>
@@ -224,23 +236,23 @@ function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAs
                 <b>{Math.round(p * 100)}%</b>
               </div>
             ))}
-          </div>
+          </div>}
         </div>
-        <p className="muted small">
-          Assessed by {result.assessment.assessed_by || 'Unknown'} · {' '}
-          Model: {result.model?.name} {result.model?.version} · confidence {Math.round(result.probability * 100)}%
-        </p>
+        {result.model && <p className="muted small">
+          Assessed by {result.assessment.assessed_by || 'Unknown'} · Model: {result.model.name} {result.model.version}
+          {result.probability != null && <> · confidence {Math.round(result.probability * 100)}%</>}
+        </p>}
       </div>
 
       <div className="card">
-        <h2 className="section-title">Why the model produced this result (SHAP)</h2>
+        <h2 className="section-title">Model explanation (SHAP)</h2>
         {result.explanation?.features?.length
           ? <ShapBars features={result.explanation.features} />
-          : <p className="muted">Feature-level explanation is not available for this prediction.</p>}
+          : <p className="muted">Feature-level explanation is not available because no ML prediction was produced.</p>}
         <Disclaimer text={result.explanation?.disclaimer} />
       </div>
 
-      {result.trend && result.trend.visits > 1 && (
+      {result.trend && result.trend.visits > 1 && result.trend.previous && result.trend.current && (
         <div className="card">
           <h2 className="section-title">Trend vs previous visit</h2>
           <p>
@@ -259,6 +271,8 @@ function PredictionResult({ result, patientLabel, onAnother, onViewHistory, onAs
           </ul>
         ) : <p className="muted">No warning rules triggered.</p>}
       </div>
+
+      <RecommendationsPanel recommendations={result.recommendations} />
 
       <Disclaimer text={result.disclaimer} />
       <div className="form-actions">

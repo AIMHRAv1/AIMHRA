@@ -10,7 +10,7 @@ import logging
 from assessments.rules import evaluate as rules_evaluate
 from assessments.rules.keywords import detect_symptoms
 from audit.services import log_event
-from chat.llm import FALLBACK_NO_LLM, generate_answer, llm_configured
+from chat.llm import generate_answer, validate_grounded_answer
 from chat.models import ChatMessage, ChatSession
 from kb.services import rag
 
@@ -25,6 +25,9 @@ CHAT_DISCLAIMER = (
 
 def _patient_context(patient_profile):
     """Minimal, authorized context for personalization (no sensitive history)."""
+    if patient_profile is None:
+        return None
+
     from assessments.models import Prediction
 
     latest = (
@@ -44,6 +47,20 @@ def _patient_context(patient_profile):
     return "; ".join(parts)
 
 
+def _approved_recommendation_lines(recommendations):
+    lines = []
+    for group in (
+        "routine_monitoring", "further_assessment",
+        "medical_consultation", "urgent_medical_attention",
+    ):
+        for recommendation in (recommendations or {}).get(group, []):
+            title = recommendation.get("title")
+            action = recommendation.get("suggested_next_action")
+            if title and action:
+                lines.append(f"{title}: {action}")
+    return lines
+
+
 def respond(session, user_message_text, request=None):
     """Process one user message through the safety pipeline and persist both
     messages. Returns the assistant message dict."""
@@ -59,9 +76,13 @@ def respond(session, user_message_text, request=None):
     vitals = {}
     from assessments.models import Assessment
 
-    latest_assessment = (
-        Assessment.objects.filter(patient=session.patient).order_by("-visit_date", "-id").first()
-    )
+    latest_assessment = None
+    if session.patient_id:
+        latest_assessment = (
+            Assessment.objects.filter(patient_id=session.patient_id)
+            .order_by("-visit_date", "-id")
+            .first()
+        )
     if detected and latest_assessment:
         vitals = {
             "systolic_bp": latest_assessment.systolic_bp,
@@ -97,6 +118,9 @@ def respond(session, user_message_text, request=None):
 
     # 2) Patient context (authorized, minimal).
     patient_context = _patient_context(session.patient)
+    approved_recommendations = (
+        latest_assessment.recommendations if latest_assessment else None
+    )
 
     # 3) RAG retrieval with source attribution.
     context = rag.retrieve_context(user_message_text)
@@ -109,36 +133,80 @@ def respond(session, user_message_text, request=None):
     # Drop the final user turn — it is passed as `question` explicitly.
     history = history[:-1]
 
-    answer, mode = generate_answer(
-        user_message_text, context_chunks=context["chunks"] if context else None,
-        history=history, patient_context=patient_context,
-    )
+    chunks = context["chunks"] if context else []
+    answer = None
+    mode = "no_relevant_context"
+    if chunks:
+        answer, mode = generate_answer(
+            user_message_text, context_chunks=chunks,
+            history=history, patient_context=patient_context,
+            approved_recommendations=approved_recommendations,
+        )
 
-    if answer is None:
-        if context and context["chunks"]:
-            excerpts = "\n\n---\n\n".join(
-                f"[{c['document_title']} — chunk {c['chunk_index']}] {c['text'][:500]}"
-                for c in context["chunks"]
+        if answer is not None and not validate_grounded_answer(answer, chunks):
+            logger.warning(
+                "LLM response lacked valid source-grounded citations; using source excerpts"
             )
-            answer = f"{FALLBACK_NO_LLM}\n\nRelevant knowledge-base excerpts:\n\n{excerpts}"
+            answer = None
+
+        if answer is None:
+            answer = "Relevant retrieved guideline excerpts (quoted verbatim):\n\n" + "\n\n".join(
+                f"[S{i}] “{chunk['text'][:500]}”"
+                for i, chunk in enumerate(chunks, start=1)
+            )
             mode = "rag_only_fallback"
         else:
-            answer = (
-                f"{FALLBACK_NO_LLM}\n\nNo indexed knowledge matched your question. "
-                "Please rephrase it or contact your healthcare provider."
+            answer = f"Guideline-based explanation (from retrieved sources):\n\n{answer}"
+        if len({chunk["document_id"] for chunk in chunks}) > 1:
+            answer += (
+                "\n\nThese excerpts are from separate sources and have not been reconciled. "
+                "If their statements differ, consult a qualified healthcare professional; "
+                "this assistant does not choose between them."
             )
-            mode = "no_llm_configured"
+    else:
+        answer = (
+            "Knowledge-base limitation: no relevant guideline information was retrieved for "
+            "this question. No guideline-based answer is available; please consult a qualified "
+            "healthcare professional for clinical guidance."
+        )
+
+    recommendation_lines = _approved_recommendation_lines(approved_recommendations)
+    if recommendation_lines:
+        answer += (
+            "\n\nApproved assessment recommendations (unchanged; retrieved excerpts do not "
+            "replace or override them):\n"
+            + "\n".join(f"- {line}" for line in recommendation_lines)
+        )
 
     sources = [
         {
+            "citation_id": f"S{i}",
             "document_title": c["document_title"],
+            "issuing_organization": c.get("issuing_organization", ""),
+            "section": c.get("section", ""),
+            "page_number": c.get("page_number"),
             "source_url": c["source_url"],
+            "chunk_id": c.get("chunk_id"),
             "chunk_index": c["chunk_index"],
             "score": c["score"],
         }
-        for c in (context["chunks"] if context else [])
+        for i, c in enumerate((context["chunks"] if context else []), start=1)
     ]
-
+    if sources:
+        references = "\n".join(
+            " — ".join(
+                part for part in [
+                    f"[{source['citation_id']}]",
+                    source["issuing_organization"] or "Issuing organization not recorded",
+                    source["document_title"],
+                    f"Section: {source['section']}" if source["section"] else "",
+                    f"p. {source['page_number']}" if source["page_number"] is not None else "",
+                    source["source_url"] or "Source URL not recorded",
+                ] if part
+            )
+            for source in sources
+        )
+        answer = f"{answer.rstrip()}\n\nSources:\n{references}"
     message = ChatMessage.objects.create(
         session=session,
         role=ChatMessage.ROLE_ASSISTANT,
@@ -159,6 +227,9 @@ def _serialize(message):
         "content": message.content,
         "escalation": message.escalation,
         "sources": message.sources,
+        "knowledge_status": (
+            "retrieved_guidelines" if message.sources else "no_relevant_guidelines_retrieved"
+        ),
         "generation_mode": message.generation_mode,
         "created_at": message.created_at.isoformat(),
         "disclaimer": CHAT_DISCLAIMER,

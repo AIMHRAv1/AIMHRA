@@ -7,6 +7,30 @@
     "HIGH_CONCERN": "Contact a healthcare professional promptly",
     "EMERGENCY": "Seek emergency medical care immediately"
   },
+  "recommendation_profiles": {
+    "ATTENTION": {
+      "group": "routine_monitoring",
+      "title": "Routine clinical follow-up",
+      "priority": "routine"
+    },
+    "HIGH_CONCERN": {
+      "group": "medical_consultation",
+      "title": "Prompt medical consultation",
+      "priority": "high"
+    },
+    "EMERGENCY": {
+      "group": "urgent_medical_attention",
+      "title": "Urgent medical attention",
+      "priority": "urgent"
+    }
+  },
+  "recommendation_groups": [
+    "routine_monitoring",
+    "further_assessment",
+    "medical_consultation",
+    "urgent_medical_attention"
+  ],
+  "recommendation_source_status": "No rule-specific clinical guideline or source is verified in this project.",
   "symptom_vocabulary": [
     "vaginal_bleeding",
     "severe_headache",

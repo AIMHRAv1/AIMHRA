@@ -3,6 +3,7 @@ date, risk category, probability, model version, trend, explanation, rule
 alerts and a prominent disclaimer."""
 import logging
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from django.core.files.base import ContentFile
 from django.utils import timezone
@@ -77,7 +78,8 @@ def generate_report(assessment, generated_by):
         ("Age (years)", assessment.age), ("Body temperature (F)", assessment.body_temperature),
         ("Heart rate (bpm)", assessment.heart_rate), ("Systolic BP (mm Hg)", assessment.systolic_bp),
         ("Diastolic BP (mm Hg)", assessment.diastolic_bp), ("BMI (kg/m2)", assessment.bmi),
-        ("HbA1c column value", assessment.hba1c), ("Fasting glucose column value", assessment.fasting_glucose),
+        ("HbA1c (mmol/mol)", assessment.hba1c),
+        ("Fasting blood glucose (mmol/L)", assessment.fasting_glucose),
     ]:
         rows.append([label, str(value)])
     table = Table(rows, colWidths=[70 * mm, 50 * mm])
@@ -113,9 +115,35 @@ def generate_report(assessment, generated_by):
     alerts = list(assessment.alerts.all())
     if alerts:
         for alert in alerts:
-            story.append(Paragraph(f"• [{alert.category}] {alert.message}", body))
+            story.append(Paragraph(f"&bull; [{escape(alert.category)}] {escape(alert.message)}", body))
     else:
         story.append(Paragraph("No warning rules triggered for this assessment.", body))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Rule-based recommendations", h2))
+    recommendations = assessment.recommendations or {}
+    recommendation_count = 0
+    for group in (
+        "routine_monitoring", "further_assessment",
+        "medical_consultation", "urgent_medical_attention",
+    ):
+        for recommendation in recommendations.get(group, []):
+            recommendation_count += 1
+            story.append(Paragraph(
+                f"<b>{escape(recommendation['title'])}</b> "
+                f"(priority: {escape(recommendation['priority'])})<br/>"
+                f"{escape(recommendation['explanation'])}<br/>"
+                f"Triggered by: {escape(', '.join(recommendation.get('triggering_rule_ids', [])))}<br/>"
+                f"Suggested next action: {escape(recommendation['suggested_next_action'])}<br/>"
+                f"Supporting source: {escape(recommendation.get('supporting_source') or 'No verified clinical source documented in the project.')}",
+                body,
+            ))
+    if not recommendation_count:
+        story.append(Paragraph("No rule-based recommendations were generated for this assessment.", body))
+    story.append(Paragraph(
+        "Recommendations are deterministic rule-based prompts, not diagnoses or treatment instructions.",
+        small,
+    ))
     story.append(Spacer(1, 10))
 
     story.append(Paragraph("Disclaimer", h2))

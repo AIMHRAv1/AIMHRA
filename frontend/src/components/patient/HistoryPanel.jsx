@@ -4,6 +4,8 @@ import { apiError } from '../../api/client'
 import { RiskTrendChart } from '../../charts'
 import { Disclaimer, EmptyState, ErrorState, Loading, RiskBadge } from '../ui'
 import { downloadReport } from '../../utils/reportDownload'
+import MeasurementHistory from './MeasurementHistory'
+import RecommendationsPanel from './RecommendationsPanel'
 
 export default function HistoryPanel({ patientId }) {
   const [data, setData] = useState(null)
@@ -51,12 +53,20 @@ export default function HistoryPanel({ patientId }) {
         <>
           <div className="card">
             <h2 className="section-title">Risk category over time</h2>
-            <RiskTrendChart series={series} />
+            <RiskTrendChart series={series.filter((item) => item.risk_level)} />
             <p className="muted small">
-              Sequence: {trend.sequence.join(' → ')} · status <b>{trend.status}</b>
+              Latest risk: <b>{trend.current || 'Not available'}</b>
+              {trend.previous && <> · previous: <b>{trend.previous}</b> · change <b>{trend.direction}</b></>}
+              {!trend.previous && trend.current && <> · baseline (no previous prediction)</>}
+              {!trend.current && <> · no prediction recorded for the latest assessment</>}
+            </p>
+            <p className="muted small">
+              Sequence: {(trend.sequence || []).join(' → ') || 'No predictions recorded'} · status <b>{trend.status}</b>
             </p>
             <p className="muted small">Trends describe stored assessments only — the system does not predict future risk.</p>
           </div>
+
+          <MeasurementHistory series={series} changes={data.measurement_trends} />
 
           <div className="card">
             <h2 className="section-title">All assessments</h2>
@@ -68,16 +78,16 @@ export default function HistoryPanel({ patientId }) {
               </thead>
               <tbody>
                 {series.map((s) => (
-                  <tr key={s.id}>
+                  <tr key={s.assessment_id}>
                     <td>{s.visit_date}</td>
                     <td>{s.gestational_week ?? '—'}</td>
-                    <td><RiskBadge level={s.risk_level} /></td>
-                    <td>{Math.round(s.probability * 100)}%</td>
-                    <td className="muted small">{s.model}</td>
+                    <td>{s.risk_level ? <RiskBadge level={s.risk_level} /> : '—'}</td>
+                    <td>{s.probability == null ? '—' : `${Math.round(s.probability * 100)}%`}</td>
+                    <td className="muted small">{s.model || '—'}</td>
                     <td>
-                      <button className="btn btn-small btn-secondary" disabled={busyId === s.id}
+                      <button className="btn btn-small btn-secondary" disabled={!s.id || busyId === s.id}
                               onClick={() => generateReport(s.id)}>
-                        {busyId === s.id ? '…' : 'PDF ↓'}
+                        {!s.id ? 'No prediction' : busyId === s.id ? '…' : 'PDF ↓'}
                       </button>
                     </td>
                   </tr>
@@ -85,6 +95,13 @@ export default function HistoryPanel({ patientId }) {
               </tbody>
             </table>
           </div>
+          {series.filter((item) => Object.values(item.recommendations || {}).some((entries) => entries.length))
+            .map((item) => (
+              <div key={item.assessment_id}>
+                <h2 className="section-title">Recommendations from {item.visit_date}</h2>
+                <RecommendationsPanel recommendations={item.recommendations} />
+              </div>
+            ))}
         </>
       )}
       <Disclaimer />

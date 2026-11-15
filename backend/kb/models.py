@@ -5,6 +5,7 @@ class KnowledgeDocument(models.Model):
     """An ingested medical knowledge document (PDF/TXT/MD)."""
 
     title = models.CharField(max_length=255)
+    issuing_organization = models.CharField(max_length=255, blank=True, default="")
     source_url = models.CharField(max_length=512, blank=True, default="", help_text="Provenance URL if available")
     file = models.FileField(upload_to="kb/documents/", blank=True)
     content_text = models.TextField(blank=True, default="", help_text="Extracted full text for text-based sources")
@@ -29,6 +30,7 @@ class DocumentChunk(models.Model):
 
     document = models.ForeignKey(KnowledgeDocument, on_delete=models.CASCADE, related_name="chunks")
     chunk_index = models.PositiveIntegerField()
+    page_number = models.PositiveIntegerField(null=True, blank=True)
     section = models.CharField(max_length=255, blank=True, default="")
     text = models.TextField()
     embedding = models.JSONField(default=list)
@@ -38,3 +40,6 @@ class DocumentChunk(models.Model):
     class Meta:
         ordering = ["document", "chunk_index"]
         indexes = [models.Index(fields=["document", "chunk_index"])]
+        constraints = [
+            models.UniqueConstraint(fields=["document", "chunk_index"], name="kb_unique_document_chunk")
+        ]

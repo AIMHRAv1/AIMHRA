@@ -1,4 +1,7 @@
+import logging
+
 from django.shortcuts import get_object_or_404
+from django.conf import settings
 from rest_framework import generics, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.views import APIView
@@ -14,6 +17,8 @@ from kb.serializers import (
     KnowledgeDocumentUploadSerializer,
 )
 from kb.services import indexing, rag
+
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeDocumentListCreateView(generics.ListCreateAPIView):
@@ -56,7 +61,9 @@ class KnowledgeDocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         document = serializer.save()
-        if any(f in self.request.data for f in ("file", "content_text")):
+        if any(f in self.request.data for f in (
+            "file", "content_text", "title", "issuing_organization", "source_url",
+        )):
             indexing.index_document(document)
         log_event(self.request, "KB_UPLOADED", target_type="kb_document", target_id=str(document.id),
                   detail={"title": document.title, "updated": True})
@@ -65,6 +72,10 @@ class KnowledgeDocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
         log_event(self.request, "KB_DELETED", target_type="kb_document", target_id=str(instance.id),
                   detail={"title": instance.title})
         instance.delete()
+        if settings.VECTOR_BACKEND == "qdrant":
+            from kb.services import store
+
+            store.sync_qdrant_index()
 
 
 class ReindexView(APIView):
@@ -75,14 +86,19 @@ class ReindexView(APIView):
     def post(self, request):
         documents = KnowledgeDocument.objects.all()
         count = 0
+        failures = []
         for document in documents:
             try:
                 indexing.index_document(document)
                 count += 1
-            except Exception:
-                continue
-        log_event(request, "KB_REINDEXED", target_type="kb", target_id="all", detail={"documents": count})
-        return ok({"reindexed": count})
+            except Exception as exc:
+                logger.exception("Knowledge document %s could not be reindexed", document.pk)
+                failures.append({"document_id": document.pk, "error": str(exc)})
+        log_event(
+            request, "KB_REINDEXED", target_type="kb", target_id="all",
+            detail={"documents": count, "failures": len(failures)},
+        )
+        return ok({"reindexed": count, "failures": failures})
 
 
 class DocumentChunksView(generics.ListAPIView):

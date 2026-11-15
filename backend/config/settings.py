@@ -177,6 +177,7 @@ EMBEDDING_BACKEND = os.getenv("EMBEDDING_BACKEND", "local").strip().lower()
 VECTOR_BACKEND = os.getenv("VECTOR_BACKEND", "local").strip().lower()
 VECTOR_DB_URL = os.getenv("VECTOR_DB_URL", "").strip()
 VECTOR_DB_API_KEY = os.getenv("VECTOR_DB_API_KEY", "").strip()
+RAG_ARTIFACTS_DIR = BASE_DIR / os.getenv("RAG_ARTIFACTS_DIR", "rag_artifacts")
 
 # ---------------------------------------------------------------------------
 # Email (password reset architecture)

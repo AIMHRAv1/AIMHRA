@@ -157,6 +157,45 @@ class PatientApiTests(TestCase):
         r = self.client.get(f"/api/patients/{patient.id}/", **self.admin_auth)
         self.assertEqual(r.status_code, 403)
 
+    def test_admin_history_returns_chronological_measurements_and_changes(self):
+        from assessments.models import Assessment
+
+        patient = PatientProfile.objects.create(full_name="History patient")
+        base = {
+            "gestational_week": 20,
+            "age": 28,
+            "body_temperature": 98.4,
+            "heart_rate": 86,
+            "diastolic_bp": 78,
+            "bmi": 23.0,
+            "hba1c": 38.0,
+            "fasting_glucose": 5.5,
+            "symptoms": [],
+            "notes": "",
+        }
+        Assessment.objects.create(
+            patient=patient, visit_date="2026-08-01", systolic_bp=145, **base
+        )
+        Assessment.objects.create(
+            patient=patient, visit_date="2026-07-01", systolic_bp=135, **base
+        )
+
+        response = self.client.get(
+            f"/api/patients/admin-history/{patient.id}/", **self.admin_auth
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        history = response.json()["data"]
+        self.assertEqual(
+            [item["visit_date"] for item in history["assessments"]],
+            ["2026-07-01", "2026-08-01"],
+        )
+        systolic = next(
+            item for item in history["measurement_trends"]
+            if item["feature"] == "systolic_bp"
+        )
+        self.assertEqual(systolic["difference"], 10)
+        self.assertEqual(history["trend"]["change"], "unavailable")
+
     def test_worker_sees_all_shared_patients(self):
         PatientProfile.objects.create(full_name="Mine", created_by=self.worker)
         PatientProfile.objects.create(full_name="Not Mine", created_by=self.other_worker)

@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from assessments.models import Alert, Assessment, Prediction
 from assessments.serializers import AlertAckSerializer, AlertSerializer, AssessmentSerializer
 from assessments.services import DISCLAIMER, create_assessment, prediction_series
-from assessments.trends import compute_trend
+from assessments.trends import compute_measurement_trends, compute_trend
 from core.exceptions import ApiError
 from core.responses import ok
 from core.permissions import IsHealthcareWorkerOnly
@@ -98,14 +98,10 @@ class RiskTrendView(APIView):
     def get(self, request):
         patient = _resolve_patient(request)
         history = prediction_series(patient)
-        probabilities = [
-            {"visit_date": h["visit_date"], "high_risk_probability": h.get("probability") if h["risk_level"] == "high risk" else None,
-             "risk_level": h["risk_level"], "gestational_week": h.get("gestational_week")}
-            for h in history
-        ]
         return ok(
             {
                 "trend": compute_trend(history),
+                "measurement_trends": compute_measurement_trends(history),
                 "series": history,
                 "disclaimer": "Trends describe stored assessments only. The system does not predict future risk.",
             }

@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from assessments.models import Alert, Assessment, Prediction
 from assessments.rules import evaluate as rules_evaluate
-from assessments.trends import compute_trend
+from assessments.trends import MEASUREMENT_FIELDS, compute_trend
 from audit.services import log_event
 from mlcore.exceptions import ModelUnavailableError
 from mlcore.registry import predict as model_predict
@@ -25,18 +25,18 @@ DISCLAIMER = (
 
 
 def create_assessment(patient, data, request=None):
-    """Create assessment + prediction + alerts atomically.
-
-    Raises ModelUnavailableError (503) if no production model exists — a
-    prediction is never fabricated.
-    """
+    """Persist the assessment and rule outcome independently of ML availability."""
     feature_values = {f: float(data[f]) for f in (
         "age", "body_temperature", "heart_rate", "systolic_bp", "diastolic_bp",
         "bmi", "hba1c", "fasting_glucose",
     )}
 
-    prediction_out = model_predict(feature_values)
-    rules_out = rules_evaluate(feature_values, data.get("symptoms") or [])
+    current_symptoms = [s for s in (data.get("symptoms") or []) if s != "none"]
+    rule_inputs = {
+        **feature_values,
+        "gestational_week": data.get("gestational_week"),
+    }
+    rules_out = rules_evaluate(rule_inputs, current_symptoms)
 
     visit_date = data.get("visit_date") or timezone.localdate()
     if isinstance(visit_date, str):
@@ -50,10 +50,35 @@ def create_assessment(patient, data, request=None):
             created_by=getattr(request, "user", None),
             visit_date=visit_date,
             gestational_week=data.get("gestational_week"),
-            symptoms=[s for s in (data.get("symptoms") or []) if s != "none"],
+            symptoms=current_symptoms,
+            recommendations=rules_out["recommendations"],
             notes=data.get("notes", ""),
             **feature_values,
         )
+        alerts = []
+        if rules_out["category"] != "NORMAL":
+            alert = Alert.objects.create(
+                assessment=assessment,
+                patient=patient,
+                category=rules_out["category"],
+                rule_id=",".join(t["id"] for t in rules_out["triggered"]),
+                rule_description="; ".join(t["description"] for t in rules_out["triggered"]),
+                message=rules_out["message"],
+                rules_version=rules_out["rules_version"],
+            )
+            alerts.append(alert)
+
+    prediction = None
+    prediction_message = None
+    try:
+        prediction_out = model_predict(feature_values)
+    except ModelUnavailableError as exc:
+        prediction_message = (
+            "ML prediction is unavailable. The assessment and clinical rule evaluation "
+            "were saved; no ML risk classification was produced."
+        )
+        logger.warning("ML prediction unavailable for assessment %s: %s", assessment.id, exc)
+    else:
         prediction = Prediction.objects.create(
             assessment=assessment,
             risk_level=prediction_out["risk_level"],
@@ -64,27 +89,16 @@ def create_assessment(patient, data, request=None):
             model_version=prediction_out["model"]["version"],
             model_ref_id=prediction_out["model"]["id"],
         )
-        alerts = []
-        if rules_out["category"] != "NORMAL":
-            alert = Alert.objects.create(
-                assessment=assessment,
-                patient=patient,
-                category=rules_out["category"],
-                rule_id=",".join(t["id"] for t in rules_out["triggered"][:5]),
-                rule_description="; ".join(t["description"] for t in rules_out["triggered"][:5]),
-                message=rules_out["message"],
-                rules_version=rules_out["rules_version"],
-            )
-            alerts.append(alert)
 
     log_event(
         request, "ASSESSMENT_CREATED", target_type="assessment", target_id=str(assessment.id),
         detail={"patient": patient.id},
     )
-    log_event(
-        request, "PREDICTION", target_type="prediction", target_id=str(prediction.id),
-        detail={"risk_level": prediction.risk_level, "model": f"{prediction.model_name} {prediction.model_version}"},
-    )
+    if prediction:
+        log_event(
+            request, "PREDICTION", target_type="prediction", target_id=str(prediction.id),
+            detail={"risk_level": prediction.risk_level, "model": f"{prediction.model_name} {prediction.model_version}"},
+        )
     if rules_out["escalate"]:
         log_event(
             request, "RULE_ESCALATION", target_type="assessment", target_id=str(assessment.id),
@@ -94,34 +108,42 @@ def create_assessment(patient, data, request=None):
     history = prediction_series(patient)
     trend = compute_trend(history)
 
-    return build_response(assessment, prediction, rules_out, alerts, trend)
+    return build_response(
+        assessment, prediction, rules_out, alerts, trend, prediction_message=prediction_message
+    )
 
 
 def prediction_series(patient):
-    """Serialized predictions for a patient, oldest first."""
+    """Serialized assessment history for a patient, oldest first."""
     rows = (
-        Prediction.objects.filter(assessment__patient=patient)
-        .select_related("assessment", "assessment__created_by")
-        .order_by("assessment__visit_date", "id")
+        Assessment.objects.filter(patient=patient)
+        .select_related("prediction", "created_by")
+        .order_by("visit_date", "id")
     )
-    return [
-        {
-            "id": p.id,
-            "risk_level": p.risk_level,
-            "probability": p.probability,
-            "model": f"{p.model_name} {p.model_version}",
-            "visit_date": p.assessment.visit_date.isoformat(),
-            "gestational_week": p.assessment.gestational_week,
-            "assessed_by": (
-                p.assessment.created_by.full_name or p.assessment.created_by.username
-                if p.assessment.created_by else None
+    history = []
+    for assessment in rows:
+        prediction = getattr(assessment, "prediction", None)
+        history.append({
+            "id": prediction.id if prediction else None,
+            "assessment_id": assessment.id,
+            "risk_level": prediction.risk_level if prediction else None,
+            "probability": prediction.probability if prediction else None,
+            "model": (
+                f"{prediction.model_name} {prediction.model_version}" if prediction else None
             ),
-        }
-        for p in rows
-    ]
+            "visit_date": assessment.visit_date.isoformat(),
+            "gestational_week": assessment.gestational_week,
+            "recommendations": assessment.recommendations,
+            "assessed_by": (
+                assessment.created_by.full_name or assessment.created_by.username
+                if assessment.created_by else None
+            ),
+            **{feature: getattr(assessment, feature) for feature in MEASUREMENT_FIELDS},
+        })
+    return history
 
 
-def build_response(assessment, prediction, rules_out, alerts, trend):
+def build_response(assessment, prediction, rules_out, alerts, trend, prediction_message=None):
     return {
         "assessment": {
             "id": assessment.id,
@@ -134,18 +156,25 @@ def build_response(assessment, prediction, rules_out, alerts, trend):
                 if assessment.created_by else None
             ),
         },
-        "risk_level": prediction.risk_level,
-        "probability": prediction.probability,
-        "probabilities": prediction.probabilities,
-        "model": {"name": prediction.model_name, "version": prediction.model_version},
-        "explanation": prediction.explanation,
+        "risk_level": prediction.risk_level if prediction else None,
+        "probability": prediction.probability if prediction else None,
+        "probabilities": prediction.probabilities if prediction else {},
+        "model": (
+            {"name": prediction.model_name, "version": prediction.model_version}
+            if prediction else None
+        ),
+        "explanation": prediction.explanation if prediction else None,
+        "prediction_status": "available" if prediction else "unavailable",
+        "prediction_message": prediction_message,
         "rules": {
             "category": rules_out["category"],
             "escalate": rules_out["escalate"],
             "message": rules_out["message"],
             "triggered": rules_out["triggered"],
             "rules_version": rules_out["rules_version"],
+            "recommendations": rules_out["recommendations"],
         },
+        "recommendations": assessment.recommendations,
         "alerts": [
             {"id": a.id, "category": a.category, "message": a.message, "status": a.status} for a in alerts
         ],

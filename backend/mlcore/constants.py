@@ -62,8 +62,8 @@ PLAUSIBILITY_RANGES = {
     "systolic_bp": (70, 250),
     "diastolic_bp": (40, 150),
     "bmi": (12.0, 60.0),
-    "hba1c": (20.0, 60.0),               # observed 30-50 in this dataset's units
-    "fasting_glucose": (2.0, 20.0),      # observed 3.5-8.9 in this dataset's units
+    "hba1c": (20.0, 60.0),               # observed 30-50 mmol/mol
+    "fasting_glucose": (2.0, 20.0),      # observed 3.5-8.9 mmol/L
 }
 
 # Human-readable labels for the assessment form / explanations.
@@ -74,17 +74,16 @@ FEATURE_LABELS = {
     "systolic_bp": "Systolic blood pressure (mm Hg)",
     "diastolic_bp": "Diastolic blood pressure (mm Hg)",
     "bmi": "BMI (kg/m2)",
-    "hba1c": "Blood glucose - HbA1c column (dataset units)",
-    "fasting_glucose": "Blood glucose - fasting column (dataset units)",
+    "hba1c": "HbA1c (mmol/mol)",
+    "fasting_glucose": "Fasting blood glucose (mmol/L)",
 }
 
-# Units note: the dataset's two glucose column headers do not match the
-# magnitudes of their values (HbA1c column holds 30-50; fasting column holds
-# 3.5-8.9, consistent with mmol/L). The model is trained on the values as
-# provided, and the assessment form documents the observed ranges. This is a
-# known data-quality limitation, recorded rather than silently "fixed".
+# The CSV glucose headers are ambiguous/inconsistent with the research paper.
+# Per the dataset's feature definitions, values are treated as mmol/mol for
+# HbA1c and mmol/L for fasting glucose. Values are used unchanged; no
+# conversion is performed.
 DATASET_NOTES = [
-    "Glucose column units are inconsistent with their headers; values used as-is.",
+    "Glucose feature units are standardized as HbA1c mmol/mol and fasting blood glucose mmol/L; raw numeric values are used unchanged without conversion.",
     "Implausible training rows (outside PLAUSIBILITY_RANGES) are dropped and counted in the inspection report.",
-    "Exact duplicate feature+label rows are dropped before splitting to avoid optimistic test estimates.",
+    "Only exact full-row duplicates (including identifiers) are removed; records with identical clinical features and labels but different identifiers are retained.",
 ]

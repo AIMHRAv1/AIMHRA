@@ -18,50 +18,42 @@ def index_document(document):
     every document is re-embedded on each index operation. Corpus sizes here
     are small; for large corpora switch EMBEDDING_BACKEND=openai.
     """
-    text, meta = ingestion.extract_text(document)
-    chunks = ingestion.chunk_text(text)
+    chunks, meta = ingestion.chunk_document(document)
     if not chunks:
         raise ValueError("No extractable text found in the document.")
 
-    all_texts = [c for c in chunks]
-    # Fit over the entire corpus (this document + all other documents).
-    other_texts = list(
-        DocumentChunk.objects.exclude(document=document).values_list("text", flat=True)
-    )
-    embeddings.fit_corpus(other_texts + all_texts)
-
     DocumentChunk.objects.filter(document=document).delete()
-    vectors = embeddings.embed_texts(chunks)
     DocumentChunk.objects.bulk_create(
         [
             DocumentChunk(
                 document=document,
                 chunk_index=i,
                 text=chunk,
-                embedding=vector.tolist(),
-                embedding_backend=embeddings.get_backend(),
+                page_number=page_number,
+                section=section,
             )
-            for i, (chunk, vector) in enumerate(zip(chunks, vectors))
+            for i, (chunk, page_number, section) in enumerate(chunks)
         ]
     )
-    # Re-embed other documents' chunks with the refitted vectorizer.
-    if other_texts:
-        _reembed_others(document)
+    corpus_chunks = list(DocumentChunk.objects.order_by("id"))
+    corpus_texts = [chunk.text for chunk in corpus_chunks]
+    embeddings.fit_corpus(corpus_texts)
+    vectors = embeddings.embed_texts(corpus_texts)
+    for chunk, vector in zip(corpus_chunks, vectors):
+        chunk.embedding = vector.tolist()
+        chunk.embedding_backend = embeddings.get_backend()
+    DocumentChunk.objects.bulk_update(
+        corpus_chunks, ["embedding", "embedding_backend"], batch_size=200
+    )
 
     document.chunk_count = len(chunks)
     document.indexed_at = datetime.now(timezone.utc)
     document.save(update_fields=["chunk_count", "indexed_at", "updated_at"])
+    from django.conf import settings
+
+    if settings.VECTOR_BACKEND == "qdrant":
+        from kb.services import store
+
+        store.sync_qdrant_index()
     logger.info("Indexed %s: %d chunks", document.title, len(chunks))
     return {"chunks": len(chunks), "meta": meta}
-
-
-def _reembed_others(exclude_document):
-    from kb.models import DocumentChunk
-
-    others = list(DocumentChunk.objects.exclude(document=exclude_document))
-    if not others:
-        return
-    vectors = embeddings.embed_texts([c.text for c in others])
-    for chunk, vector in zip(others, vectors):
-        chunk.embedding = vector.tolist()
-    DocumentChunk.objects.bulk_update(others, ["embedding"], batch_size=200)

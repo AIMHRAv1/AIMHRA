@@ -49,12 +49,11 @@ def validate_dataset(df, expected_levels):
 
 
 def clean_dataset(df):
-    """Drop exact duplicates and implausible rows. Returns (clean_df, stats)."""
+    """Drop exact full-row duplicates and implausible rows. Returns (clean_df, stats)."""
     stats = {"rows_in": int(len(df))}
 
-    dedup_keys = FEATURES + ["risk_level"]
     before = len(df)
-    df = df.drop_duplicates(subset=dedup_keys, keep="first")
+    df = df.drop_duplicates(keep="first")
     stats["exact_duplicates_dropped"] = before - len(df)
 
     dropped_by_feature = {}

@@ -46,6 +46,39 @@ def _matches(rule, vitals, symptoms):
     return False
 
 
+def _build_recommendations(triggered, ruleset):
+    recommendations = {group: [] for group in ruleset["recommendation_groups"]}
+    grouped = {}
+    for rule in triggered:
+        profile = ruleset["recommendation_profiles"].get(rule["category"])
+        if profile is None:
+            continue
+        group = profile["group"]
+        entry = grouped.setdefault(group, {
+            "title": profile["title"],
+            "explanation": [],
+            "priority": profile["priority"],
+            "triggering_rule_id": rule["id"],
+            "triggering_rule_ids": [],
+            "triggered_conditions": [],
+            "suggested_next_action": ruleset["messages"][rule["category"]],
+            "supporting_source": None,
+            "source_status": ruleset["recommendation_source_status"],
+        })
+        if rule["id"] not in entry["triggering_rule_ids"]:
+            entry["triggering_rule_ids"].append(rule["id"])
+            entry["triggered_conditions"].append(rule["description"])
+
+    for group, recommendation in grouped.items():
+        conditions = "; ".join(recommendation["triggered_conditions"])
+        recommendation["explanation"] = (
+            f"Configured warning condition(s) triggered: {conditions}. "
+            "This rule-based result is not a diagnosis."
+        )
+        recommendations[group].append(recommendation)
+    return recommendations
+
+
 def evaluate(vitals, symptoms, force_reload=False):
     """Evaluate all rules; return the highest-priority outcome.
 
@@ -75,4 +108,5 @@ def evaluate(vitals, symptoms, force_reload=False):
         "triggered": [
             {"id": r["id"], "category": r["category"], "description": r["description"]} for r in ordered
         ],
+        "recommendations": _build_recommendations(ordered, ruleset),
     }

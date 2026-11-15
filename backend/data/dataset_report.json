@@ -1,5 +1,5 @@
 {
-  "dataset": "D:\\project\\AIMHRA\\AIMHRA\\v1\\backend\\data\\Mathernal_Risk.csv",
+  "dataset": "D:\\AIHMRSV1\\AIMHRA\\backend\\data\\Mathernal_Risk.csv",
   "md5": "6ad779f622f39cc28646d92a01270dab",
   "rows": 6103,
   "columns": 11,
@@ -96,9 +96,9 @@
     ]
   },
   "notes": [
-    "Glucose column units are inconsistent with their headers; values used as-is.",
+    "Glucose feature units are standardized as HbA1c mmol/mol and fasting blood glucose mmol/L; raw numeric values are used unchanged without conversion.",
     "Implausible training rows (outside PLAUSIBILITY_RANGES) are dropped and counted in the inspection report.",
-    "Exact duplicate feature+label rows are dropped before splitting to avoid optimistic test estimates."
+    "Only exact full-row duplicates (including identifiers) are removed; records with identical clinical features and labels but different identifiers are retained."
   ],
   "validation": {
     "rows": 6103,
@@ -112,18 +112,18 @@
   },
   "cleaning": {
     "rows_in": 6103,
-    "exact_duplicates_dropped": 1,
+    "exact_duplicates_dropped": 0,
     "implausible_rows_dropped_by_feature": {
       "age": 1,
       "body_temperature": 43,
       "diastolic_bp": 1
     },
     "implausible_rows_dropped_total": 45,
-    "rows_out": 6057,
+    "rows_out": 6058,
     "class_distribution_out": {
       "mid risk": 2043,
       "high risk": 2016,
-      "low risk": 1998
+      "low risk": 1999
     }
   },
   "numeric_summary": {

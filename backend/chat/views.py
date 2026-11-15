@@ -9,7 +9,7 @@ from core.exceptions import ApiError
 from core.responses import ok
 from core.permissions import IsHealthcareWorkerOnly
 from patients.models import PatientProfile
-from patients.selectors import can_access_patient, patient_ids_for_healthcare_worker
+from patients.selectors import can_access_patient
 
 
 class SessionSerializer(serializers.ModelSerializer):
@@ -29,14 +29,14 @@ class MessageSerializer(serializers.ModelSerializer):
 
 def _resolve_session(request, session_id):
     session = get_object_or_404(ChatSession.objects.select_related("patient"), pk=session_id)
-    if not can_access_patient(request.user, session.patient):
+    if session.created_by_id != request.user.id:
         raise ApiError("You are not authorized to access this conversation.", code="PERMISSION_DENIED", status_code=403)
     return session
 
 
 def _resolve_patient_for_session(request, patient_id):
-    if not patient_id:
-        raise ApiError("`patient` is required to create a conversation.", code="VALIDATION_ERROR", status_code=400)
+    if patient_id is None or patient_id == "":
+        return None
     patient = get_object_or_404(PatientProfile, pk=patient_id)
     if not can_access_patient(request.user, patient):
         raise ApiError("You are not authorized to access this patient.", code="PERMISSION_DENIED", status_code=403)
@@ -47,9 +47,9 @@ class SessionListCreateView(APIView):
     permission_classes = [IsHealthcareWorkerOnly]
     def get(self, request):
         user = request.user
-        qs = ChatSession.objects.select_related("patient").order_by("-updated_at")
-        if user.role == "HEALTHCARE_WORKER":
-            qs = qs.filter(patient_id__in=patient_ids_for_healthcare_worker(user))
+        qs = ChatSession.objects.select_related("patient").filter(
+            created_by=user,
+        ).order_by("-updated_at")
         patient_id = request.query_params.get("patient")
         if patient_id:
             _resolve_patient_for_session(request, patient_id)
@@ -66,7 +66,7 @@ class SessionListCreateView(APIView):
         )
         log_event(
             request, "CHAT_ACCESS", target_type="chat_session", target_id=str(session.id),
-            detail={"patient": patient.id, "action": "session_created"},
+            detail={"patient": patient.id if patient else None, "action": "session_created"},
         )
         return ok({"session": SessionSerializer(session).data}, status=201)
 
@@ -80,8 +80,6 @@ class SessionDetailView(APIView):
 
     def delete(self, request, session_id):
         session = _resolve_session(request, session_id)
-        if session.created_by_id != request.user.id and request.user.role != "ADMIN":
-            raise ApiError("Only the session owner can delete it.", code="PERMISSION_DENIED", status_code=403)
         session.delete()
         return ok({"deleted": True})
 
