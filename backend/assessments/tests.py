@@ -81,6 +81,10 @@ class RuleEngineTests(TestCase):
         self.assertIn("severe_headache", found)
         self.assertIn("dizziness_fainting", found)
 
+    def test_eclampsia_education_question_is_not_detected_as_convulsions(self):
+        found = detect_symptoms("What is eclampsia and pre-eclampsia?")
+        self.assertNotIn("convulsions", found)
+
 
 class TrendTests(TestCase):
     def test_improving_direction(self):

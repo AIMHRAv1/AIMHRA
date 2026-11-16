@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { chatService } from '../../services/auth'
 import { apiError } from '../../api/client'
-import { CategoryBadge, Disclaimer, EmptyState, ErrorState, Loading, MarkdownLite } from '../ui'
+import { Disclaimer, EmptyState, ErrorState, Loading, MarkdownLite } from '../ui'
 
 export default function ChatPanel({ patientId }) {
   const [sessions, setSessions] = useState([])
@@ -106,15 +106,16 @@ export default function ChatPanel({ patientId }) {
 
       <div className="chat-main card">
         {messages.length === 0 ? (
-          <EmptyState title="Ask AIMHRA about this patient" hint="Educational maternal-health information with trusted retrieval. Emergency warnings always take priority." />
+          <EmptyState title="Ask AIMHRA a question" hint="Get educational maternal-health information, with answers grounded in the knowledge base when available." />
         ) : (
           <div className="chat-stream">
             {messages.map((m, i) => (
               <div key={i} className={`msg msg-${m.role.toLowerCase()}`}>
-                {m.escalation?.escalate && (
-                  <div className="msg-escalation"><CategoryBadge category={m.escalation.category} /> Rule-based escalation — seek care now</div>
+                {m.generation_mode === 'escalation' ? (
+                  <div className="msg-content muted">This older response is no longer shown here. Ask your question again for an educational reply.</div>
+                ) : (
+                  <div className="msg-content"><MarkdownLite text={m.content} /></div>
                 )}
-                <div className="msg-content"><MarkdownLite text={m.content} /></div>
                 {m.sources?.length > 0 && (
                   <div className="msg-sources">
                     <button className="link" onClick={() => setShowSources((s) => ({ ...s, [i]: !s[i] }))}>
@@ -150,7 +151,7 @@ export default function ChatPanel({ patientId }) {
           <button className="btn btn-primary" disabled={busy || !input.trim() || !activeId}>Send</button>
         </form>
       </div>
-      <Disclaimer text="This assistant provides general educational information — not diagnosis or treatment. For emergencies, seek immediate medical care." />
+      <Disclaimer text="This assistant provides general educational information — not diagnosis or treatment." />
     </div>
   )
 }

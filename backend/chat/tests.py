@@ -1,5 +1,5 @@
-"""Chat pipeline tests: worker-driven patient sessions, emergency escalation,
-safe fallback and access control."""
+"""Chat pipeline tests: worker-driven patient sessions, educational fallback
+and access control."""
 from accounts.models import User
 from chat.models import ChatMessage, ChatSession
 from django.test import TestCase, override_settings
@@ -90,34 +90,15 @@ class ChatPipelineTests(TestCase):
         )
         self.assertEqual(r.status_code, 403)
 
-    EMERGENCY_KB_TEXT = (
-        "Heavy vaginal bleeding in pregnancy is an emergency. While arranging emergency "
-        "care, the patient should lie on her side, stay calm, avoid drinking or eating, "
-        "and have someone stay with her. Note the amount of bleeding and any clots to "
-        "report to the medical team. Do not take any medication unless instructed by a "
-        "clinician. Transport to the nearest hospital as quickly and smoothly as possible."
-    )
-
-    def test_emergency_message_warns_then_advises(self):
-        self.client.post(
-            "/api/rag/documents/",
-            {"title": "Bleeding Emergency Guidance", "content_text": self.EMERGENCY_KB_TEXT},
-            content_type="application/json",
-            **self.admin_auth,
-        )
+    def test_chat_does_not_run_assessment_emergency_escalation(self):
         reply = self._send("I am having convulsions and vaginal bleeding")
-        self.assertTrue(reply["escalation"]["escalate"])
-        self.assertEqual(reply["generation_mode"], "escalation")
-        content = reply["content"].lower()
-        # The warning must come first and must never be softened.
-        self.assertIn("do not wait", content)
-        self.assertIn("nearest hospital", content)
-        self.assertLess(content.find("do not wait"), content.find("while you arrange emergency care"))
-        # Practical advice on what to do follows the warning.
-        self.assertIn("while you arrange emergency care", content)
+        self.assertFalse(reply["escalation"].get("escalate", False))
+        self.assertNotEqual(reply["generation_mode"], "escalation")
+        self.assertNotIn("Warning signs detected in your message", reply["content"])
+        self.assertNotIn("seek care now", reply["content"].lower())
         from audit.models import AuditLog
 
-        self.assertTrue(AuditLog.objects.filter(action="RULE_ESCALATION", target_type="chat_message").exists())
+        self.assertFalse(AuditLog.objects.filter(action="RULE_ESCALATION", target_type="chat_message").exists())
 
     def test_non_emergency_message_gets_safe_answer_without_llm(self):
         # No local model server in tests -> deterministic extractive fallback path.
@@ -125,6 +106,44 @@ class ChatPipelineTests(TestCase):
         self.assertFalse(reply["escalation"].get("escalate", False))
         self.assertIn("healthcare professional", reply["content"])
         self.assertIn(reply["generation_mode"], ("no_llm_configured", "rag_only_fallback", "local_llm"))
+
+    def test_chat_does_not_inject_assessment_vitals_into_educational_answer(self):
+        from assessments.models import Assessment
+
+        Assessment.objects.create(
+            patient=self.profile,
+            visit_date="2026-11-14",
+            age=30,
+            body_temperature=98.4,
+            heart_rate=90,
+            systolic_bp=170,
+            diastolic_bp=115,
+            bmi=32,
+            hba1c=40,
+            fasting_glucose=6,
+        )
+        reply = self._send("What is eclampsia and pre-eclampsia?")
+        self.assertFalse(reply["escalation"].get("escalate", False))
+        self.assertNotEqual(reply["generation_mode"], "escalation")
+        self.assertNotIn("Warning signs detected in your message", reply["content"])
+        self.assertNotIn("high blood pressure", reply["content"].lower())
+
+    def test_legacy_escalation_messages_are_not_reused_as_chat_context(self):
+        from unittest.mock import patch
+
+        ChatMessage.objects.create(
+            session_id=self.session_id,
+            role=ChatMessage.ROLE_ASSISTANT,
+            content="Old rule alert text",
+            generation_mode="escalation",
+        )
+        with patch(
+            "chat.services.generate_answer",
+            return_value=("Educational answer", "local_llm"),
+        ) as generate:
+            self._send("What is pre-eclampsia?")
+        history = generate.call_args.kwargs["history"]
+        self.assertNotIn("Old rule alert text", [message["content"] for message in history])
 
     def test_rag_sources_attached_when_kb_has_content(self):
         self.client.post(

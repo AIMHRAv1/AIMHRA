@@ -10,8 +10,11 @@ from accounts.models import User
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "email", "full_name", "phone", "role", "date_joined", "is_active"]
-        read_only_fields = ["id", "role", "date_joined", "is_active"]
+        fields = [
+            "id", "username", "email", "full_name", "phone", "role",
+            "date_joined", "is_active", "is_superuser",
+        ]
+        read_only_fields = ["id", "role", "date_joined", "is_active", "is_superuser"]
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -100,7 +103,40 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 class UserAdminSerializer(serializers.ModelSerializer):
     """Admin-facing user serializer (role editing allowed)."""
 
+    patients_handled = serializers.IntegerField(read_only=True, default=0)
+
     class Meta:
         model = User
-        fields = ["id", "username", "email", "full_name", "phone", "role", "is_active", "date_joined"]
-        read_only_fields = ["id", "date_joined"]
+        fields = [
+            "id", "username", "email", "full_name", "phone", "role",
+            "is_active", "date_joined", "is_superuser", "patients_handled",
+        ]
+        read_only_fields = ["id", "date_joined", "is_superuser", "patients_handled"]
+
+    def validate_role(self, value):
+        request = self.context.get("request")
+        user = request.user if request else None
+        instance = self.instance
+        if value == User.ROLE_ADMIN and not (user and user.is_superuser):
+            raise serializers.ValidationError("Only a superuser can create administrator accounts.")
+        if instance and instance.is_superuser and value != User.ROLE_ADMIN:
+            raise serializers.ValidationError("A superuser account cannot be changed to another role.")
+        if instance and instance.role == User.ROLE_ADMIN and not (user and user.is_superuser):
+            if value != instance.role:
+                raise serializers.ValidationError("Only a superuser can change an administrator's role.")
+        return value
+
+    def validate_is_active(self, value):
+        request = self.context.get("request")
+        user = request.user if request else None
+        instance = self.instance
+        if instance and instance.is_superuser and not value:
+            raise serializers.ValidationError("A superuser account cannot be deactivated.")
+        if (
+            instance
+            and instance.role == User.ROLE_ADMIN
+            and instance.is_active != value
+            and not (user and user.is_superuser)
+        ):
+            raise serializers.ValidationError("Only a superuser can activate or deactivate an administrator.")
+        return value

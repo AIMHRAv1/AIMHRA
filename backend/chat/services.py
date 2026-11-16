@@ -1,131 +1,40 @@
-"""Chat pipeline (requirements #20-23, #54):
+"""Educational chat pipeline: message -> RAG retrieval -> local LLM, with an
+extractive knowledge-base fallback when the local model is unavailable.
 
-    message -> emergency rule engine
-                   |-- triggered -> warning FIRST + while-you-arrange-care advice
-                   '-- clear -----> patient context -> RAG retrieval -> local LLM
-                                                                       '-- unavailable -> extractive fallback
-
-Emergency warnings always come first and are never softened, but the answer
-still includes practical advice on what to do while arranging emergency care.
+Assessment rules and recorded vital signs are handled by the assessment
+workflow, not injected into chat replies.
 """
-import logging
-
-from assessments.rules import evaluate as rules_evaluate
-from assessments.rules.keywords import detect_symptoms
 from audit.services import log_event
 from chat.llm import FALLBACK_NO_LLM, KB_INTRO, compose_extractive, generate_answer, looks_like_refusal
 from chat.models import ChatMessage, ChatSession
 from kb.services import rag
 
-logger = logging.getLogger(__name__)
-
 CHAT_DISCLAIMER = (
     "This assistant provides general educational information, not medical diagnosis or "
-    "treatment. Emergency warnings always take priority. Consult a healthcare professional "
-    "for medical advice."
+    "treatment. Consult a healthcare professional for personal medical advice."
 )
 
 
-def _patient_context(patient_profile):
-    """Minimal, authorized context for personalization (no sensitive history)."""
-    from assessments.models import Prediction
-
-    latest = (
-        Prediction.objects.filter(assessment__patient=patient_profile)
-        .select_related("assessment")
-        .order_by("-assessment__visit_date", "-id")
-        .first()
-    )
-    if not latest:
-        return None
-    parts = [
-        f"latest assessed risk category: {latest.risk_level} "
-        f"(model confidence {round(latest.probability * 100)}%)"
-    ]
-    if latest.assessment.gestational_week:
-        parts.append(f"reported gestational week at last assessment: {latest.assessment.gestational_week}")
-    return "; ".join(parts)
-
-
 def respond(session, user_message_text, request=None):
-    """Process one user message through the safety pipeline and persist both
-    messages. Returns the assistant message dict."""
+    """Generate an educational response and persist both messages."""
     ChatMessage.objects.create(session=session, role=ChatMessage.ROLE_USER, content=user_message_text)
 
-    detected = detect_symptoms(user_message_text)
-
-    # 1) EMERGENCY RULE ENGINE — first and authoritative.
-    # Vital signs come from the latest assessment (if any); chat text
-    # contributes detected symptoms. Only high-concern/emergency words in the
-    # message itself escalate — stored vitals alone don't hijack a chat about
-    # nutrition.
-    vitals = {}
-    from assessments.models import Assessment
-
-    latest_assessment = (
-        Assessment.objects.filter(patient=session.patient).order_by("-visit_date", "-id").first()
-    )
-    if detected and latest_assessment:
-        vitals = {
-            "systolic_bp": latest_assessment.systolic_bp,
-            "diastolic_bp": latest_assessment.diastolic_bp,
-            "heart_rate": latest_assessment.heart_rate,
-            "body_temperature": latest_assessment.body_temperature,
-            "bmi": latest_assessment.bmi,
-        }
-    rules_out = rules_evaluate(vitals, detected)
-
-    if rules_out["escalate"]:
-        triggered_ids = ", ".join(t["id"] for t in rules_out["triggered"])
-        warning = (
-            f"{rules_out['message']}\n\n"
-            f"Warning signs detected in your message: {triggered_ids} "
-            f"(rule set {rules_out['rules_version']}).\n\n"
-            "Please do not wait to see if it improves. Go to the nearest hospital or "
-            "doctor now, or call emergency services. If you are alone, call someone now. "
-            "This chat assistant cannot provide emergency care."
-        )
-        advice, advice_sources = _escalation_advice(user_message_text, detected)
-        if advice:
-            answer = (
-                f"{warning}\n\n"
-                "While you arrange emergency care, the trusted knowledge base indicates "
-                f"the following:\n\n{advice}\n\n"
-                "This advice does not replace emergency care — seek help immediately."
-            )
-        else:
-            answer = warning
-        message = ChatMessage.objects.create(
-            session=session,
-            role=ChatMessage.ROLE_ASSISTANT,
-            content=answer,
-            escalation=rules_out,
-            sources=advice_sources,
-            generation_mode="escalation",
-        )
-        log_event(
-            request, "RULE_ESCALATION", target_type="chat_message", target_id=str(message.id),
-            detail={"category": rules_out["category"], "rules": [t["id"] for t in rules_out["triggered"]]},
-        )
-        return _serialize(message)
-
-    # 2) Patient context (authorized, minimal).
-    patient_context = _patient_context(session.patient)
-
-    # 3) RAG retrieval with source attribution.
+    # 1) RAG retrieval with source attribution.
     context = rag.retrieve_context(user_message_text)
 
-    # 4) LLM generation with graceful fallback.
+    # 2) LLM generation with graceful fallback.
     history = [
         {"role": m.role, "content": m.content}
-        for m in ChatMessage.objects.filter(session=session).order_by("created_at", "id")[:12]
+        for m in ChatMessage.objects.filter(session=session)
+        .exclude(role=ChatMessage.ROLE_ASSISTANT, generation_mode="escalation")
+        .order_by("created_at", "id")[:12]
     ]
     # Drop the final user turn — it is passed as `question` explicitly.
     history = history[:-1]
 
     answer, mode = generate_answer(
         user_message_text, context_chunks=context["chunks"] if context else None,
-        history=history, patient_context=patient_context,
+        history=history,
     )
     # A blanket model refusal is treated as a generation failure and replaced
     # with the extractive knowledge-base answer.
@@ -165,48 +74,13 @@ def respond(session, user_message_text, request=None):
         session=session,
         role=ChatMessage.ROLE_ASSISTANT,
         content=answer,
-        escalation={"category": rules_out["category"], "escalate": False, "rules_version": rules_out["rules_version"]},
+        escalation={"escalate": False},
         sources=sources,
         generation_mode=mode,
     )
     log_event(request, "CHAT_ACCESS", target_type="chat_session", target_id=str(session.id),
               detail={"mode": mode, "sources": len(sources)})
     return _serialize(message)
-
-
-def _escalation_advice(message_text, detected):
-    """Practical 'while you arrange emergency care' advice for an escalated
-    message. Returns (advice_text, sources) — (None, []) when nothing useful
-    can be grounded. The emergency warning itself is never generated here; it
-    always precedes this text in the answer."""
-    symptom_labels = ", ".join(detected) if detected else message_text[:200]
-    question = (
-        f"What immediate practical steps can be taken while arranging emergency medical "
-        f"care for: {symptom_labels}?"
-    )
-    context = rag.retrieve_context(question)
-    chunks = context["chunks"] if context else []
-    if not chunks:
-        return None, []
-
-    answer, _mode = generate_answer(question, context_chunks=chunks)
-    if answer is not None and looks_like_refusal(answer):
-        answer = None
-    if not answer:
-        answer = compose_extractive(question, chunks, intro=KB_INTRO)
-    if not answer:
-        return None, []
-
-    sources = [
-        {
-            "document_title": c["document_title"],
-            "source_url": c["source_url"],
-            "chunk_index": c["chunk_index"],
-            "score": c["score"],
-        }
-        for c in chunks
-    ]
-    return answer, sources
 
 
 def _serialize(message):

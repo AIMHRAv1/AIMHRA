@@ -146,6 +146,143 @@ class AuthFlowTests(TestCase):
         roles = {u["role"] for u in r.json()["data"]["results"]}
         self.assertNotIn("PATIENT", roles)
 
+    def test_only_superuser_can_create_or_deactivate_administrators(self):
+        admin = make_user("ordinaryadmin", role="ADMIN")
+        root = User.objects.create_superuser(
+            username="rootuser", email="root@test.com", password="Str0ng!Pass1"
+        )
+        admin_token = RefreshToken.for_user(admin).access_token
+        root_token = RefreshToken.for_user(root).access_token
+        admin_auth = {"HTTP_AUTHORIZATION": f"Bearer {admin_token}"}
+        root_auth = {"HTTP_AUTHORIZATION": f"Bearer {root_token}"}
+
+        rejected = self.client.post(
+            "/api/auth/users/",
+            {
+                "username": "blockedadmin",
+                "email": "blocked@test.com",
+                "password": "Str0ng!Pass1",
+                "role": "ADMIN",
+            },
+            content_type="application/json",
+            **admin_auth,
+        )
+        self.assertEqual(rejected.status_code, 400, rejected.content)
+        self.assertFalse(User.objects.filter(username="blockedadmin").exists())
+
+        created = self.client.post(
+            "/api/auth/users/",
+            {
+                "username": "newadmin",
+                "email": "newadmin@test.com",
+                "password": "Str0ng!Pass1",
+                "role": "ADMIN",
+            },
+            content_type="application/json",
+            **root_auth,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+
+        rejected = self.client.patch(
+            f"/api/auth/users/{admin.id}/",
+            {"is_active": False},
+            content_type="application/json",
+            **admin_auth,
+        )
+        self.assertEqual(rejected.status_code, 400, rejected.content)
+        self.assertTrue(User.objects.get(pk=admin.id).is_active)
+
+        deactivated = self.client.patch(
+            f"/api/auth/users/{admin.id}/",
+            {"is_active": False},
+            content_type="application/json",
+            **root_auth,
+        )
+        self.assertEqual(deactivated.status_code, 200, deactivated.content)
+
+        protected = self.client.patch(
+            f"/api/auth/users/{root.id}/",
+            {"is_active": False},
+            content_type="application/json",
+            **root_auth,
+        )
+        self.assertEqual(protected.status_code, 400, protected.content)
+
+    def test_admin_can_create_healthcare_worker(self):
+        admin = make_user("workercreatoradmin", role="ADMIN")
+        token = RefreshToken.for_user(admin).access_token
+        response = self.client.post(
+            "/api/auth/users/",
+            {
+                "username": "createdworker",
+                "email": "createdworker@test.com",
+                "password": "Str0ng!Pass1",
+                "role": "HEALTHCARE_WORKER",
+            },
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["role"], "HEALTHCARE_WORKER")
+
+    def test_healthcare_worker_activity_groups_assessments_by_patient(self):
+        from assessments.models import Assessment, Prediction
+        from patients.models import PatientProfile
+
+        worker = make_user("activityworker")
+        admin = make_user("activityadmin", role="ADMIN")
+        first_patient = PatientProfile.objects.create(patient_code="P-ACTIVITY1")
+        second_patient = PatientProfile.objects.create(patient_code="P-ACTIVITY2")
+        for patient, visit_date, risk in (
+            (first_patient, "2026-09-01", "high risk"),
+            (first_patient, "2026-09-10", "mid risk"),
+            (second_patient, "2026-09-05", "low risk"),
+        ):
+            assessment = Assessment.objects.create(
+                patient=patient,
+                created_by=worker,
+                visit_date=visit_date,
+                age=28,
+                body_temperature=98.4,
+                heart_rate=86,
+                systolic_bp=120,
+                diastolic_bp=78,
+                bmi=23,
+                hba1c=38,
+                fasting_glucose=5.5,
+            )
+            Prediction.objects.create(
+                assessment=assessment,
+                risk_level=risk,
+                probability=0.9,
+                probabilities={},
+                explanation={},
+                model_name="test-model",
+                model_version="1",
+            )
+
+        token = RefreshToken.for_user(admin).access_token
+        response = self.client.get(
+            f"/api/auth/users/{worker.id}/activity/",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        data = response.json()["data"]
+        self.assertEqual(data["user"]["patients_handled"], 2)
+        rows = {patient["patient_code"]: patient for patient in data["patients"]}
+        self.assertEqual(rows["P-ACTIVITY1"]["assessment_count"], 2)
+        self.assertEqual(rows["P-ACTIVITY1"]["last_assessed_date"], "2026-09-10")
+        self.assertEqual(rows["P-ACTIVITY1"]["latest_risk"], "mid risk")
+        listing = self.client.get(
+            "/api/auth/users/",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(listing.status_code, 200, listing.content)
+        worker_row = next(
+            row for row in listing.json()["data"]["results"] if row["id"] == worker.id
+        )
+        self.assertEqual(worker_row["patients_handled"], 2)
+
     def test_logout_blacklists_refresh(self):
         user = make_user("worker6", role="HEALTHCARE_WORKER")
         refresh = RefreshToken.for_user(user)

@@ -153,6 +153,9 @@ input:focus, textarea:focus, select:focus { outline: 2px solid #9cc3d2; border-c
 .data-table th { text-align: left; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); border-bottom: 2px solid var(--line); padding: 8px 10px; }
 .data-table td { border-bottom: 1px solid var(--line); padding: 9px 10px; vertical-align: middle; }
 .data-table tr:hover td { background: #f7fafb; }
+.table-scroll .patient-list-table { min-width: 1040px; }
+.patient-list-table th, .patient-list-table td { white-space: nowrap; }
+.patient-list-contact { max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
 .row-danger td { background: var(--emergency-soft); }
 .row-warn td { background: var(--mid-soft); }
 .row-good td { background: var(--low-soft); }
@@ -291,6 +294,9 @@ input:focus, textarea:focus, select:focus { outline: 2px solid #9cc3d2; border-c
 .empty-icon svg { display: block; margin: 0 auto; }
 .table-scroll { overflow-x: auto; }
 .table-scroll .data-table { min-width: 640px; }
+.measurement-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.measurement-chart { min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.measurement-chart h3 { margin: 0; font-size: 0.9rem; }
 
 /* --- OCR scan mode (assessment form) --- */
 .mode-toggle { display: flex; gap: 8px; flex-wrap: wrap; }

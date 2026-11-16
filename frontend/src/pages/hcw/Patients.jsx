@@ -3,16 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { patientService } from '../../services/auth'
 import { EmptyState, ErrorState, Loading, RiskBadge } from '../../components/ui'
-
-function ageFrom(dob) {
-  if (!dob) return null
-  const b = new Date(dob)
-  const n = new Date()
-  let age = n.getFullYear() - b.getFullYear()
-  const m = n.getMonth() - b.getMonth()
-  if (m < 0 || (m === 0 && n.getDate() < b.getDate())) age -= 1
-  return age >= 0 ? age : null
-}
+import { ageFromDateOfBirth, currentGestationalWeek } from '../../utils/patientDates'
 
 export default function PatientList() {
   const { user } = useAuth()
@@ -24,24 +15,48 @@ export default function PatientList() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    patientService.list()
-      .then((d) => setPatients(d.results ?? []))
-      .catch(setError)
-  }, [])
+    let active = true
+    const timer = window.setTimeout(async () => {
+      try {
+        setError(null)
+        setPatients(null)
+        const firstPage = await patientService.list({ search: search.trim(), page_size: 100 })
+        const pages = firstPage.pages ?? 1
+        const remainingPages = await Promise.all(
+          Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
+            patientService.list({ search: search.trim(), page_size: 100, page: index + 2 }),
+          ),
+        )
+        if (active) {
+          setPatients([
+            ...(firstPage.results ?? []),
+            ...remainingPages.flatMap((page) => page.results ?? []),
+          ])
+        }
+      } catch (loadError) {
+        if (active) setError(loadError)
+      }
+    }, search ? 250 : 0)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [search])
 
   const rows = useMemo(() => {
     if (!patients) return []
-    const q = search.trim().toLowerCase()
-    const filtered = !q ? patients.slice() : patients.filter((p) =>
-      [p.patient_code, p.full_name, p.phone, p.email].some((v) => (v || '').toLowerCase().includes(q)),
-    )
+    const filtered = patients.slice()
     const order = { 'high risk': 0, 'mid risk': 1, 'low risk': 2 }
     return filtered.sort((a, b) => {
+      if (!isAdmin) {
+        return (b.last_assessment_date || '').localeCompare(a.last_assessment_date || '')
+          || new Date(b.created_at) - new Date(a.created_at)
+      }
       const ra = order[a.current_risk] ?? 3
       const rb = order[b.current_risk] ?? 3
       return ra - rb || new Date(b.created_at) - new Date(a.created_at)
     })
-  }, [patients, search])
+  }, [patients, isAdmin])
 
   if (error) return <div className="page"><ErrorState error={error} /></div>
   if (!patients) return <div className="page"><Loading /></div>
@@ -53,7 +68,7 @@ export default function PatientList() {
           <h1>Patients</h1>
           <p className="muted">
             {isAdmin
-              ? 'Administrator view — patient information is not accessible. Codes and clinical analytics only.'
+              ? 'Administrator view — patient information is not accessible. Patient IDs and clinical summaries only.'
               : 'Patients you created or were assigned, sorted by current risk — high risk first.'}
           </p>
         </div>
@@ -75,55 +90,62 @@ export default function PatientList() {
           action={!search && !isAdmin && <Link className="btn btn-primary" to="/app/patients/new">+ Add Patient</Link>}
         />
       ) : (
-        <div className="card">
-          <table className="data-table">
+        <div className="card table-scroll">
+          <table className={`data-table${isAdmin ? '' : ' patient-list-table'}`}>
             <thead>
               <tr>
-                <th>Code</th>
+                <th>{isAdmin ? 'Patient ID' : 'Code'}</th>
                 {!isAdmin && <th>Name</th>}
                 {!isAdmin && <th>Contact</th>}
                 {!isAdmin && <th>Age / DOB</th>}
-                {!isAdmin && <th>Gest. wk</th>}
-                <th>Current risk</th>
-                <th>Trend</th>
-                <th>Assessments</th>
-                <th>Last visit</th>
-                <th>Open alerts</th>
+                {!isAdmin && <th>Gestational week</th>}
+                {isAdmin && <th>Latest risk tier</th>}
+                {isAdmin && <th>Trend</th>}
+                <th>{isAdmin ? 'Assessment count' : 'Assessments'}</th>
+                {isAdmin
+                  ? <th>Last assessed by</th>
+                  : <><th>Last visit</th><th>Last assessed by</th></>}
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((p) => {
-                const age = ageFrom(p.date_of_birth)
+                const age = ageFromDateOfBirth(p.date_of_birth)
+                const gestationalWeek = currentGestationalWeek(
+                  p.gestational_week_at_registration,
+                  p.created_at,
+                )
                 return (
                   <tr key={p.id} className={p.current_risk === 'high risk' ? 'row-warn' : ''}>
                     <td><Link to={`/app/patients/${p.id}?tab=overview`}>{p.patient_code}</Link></td>
                     {!isAdmin && <td>{p.full_name || '—'}</td>}
                     {!isAdmin && (
-                      <td className="muted small">
-                        {p.phone || '—'}{p.email ? <><br />{p.email}</> : null}
+                      <td className="muted small patient-list-contact" title={[p.phone, p.email].filter(Boolean).join(' · ')}>
+                        {[p.phone, p.email].filter(Boolean).join(' · ') || '—'}
                       </td>
                     )}
                     {!isAdmin && <td>{age != null ? age : (p.date_of_birth || '—')}</td>}
-                    {!isAdmin && <td>{p.gestational_week_at_registration ?? '—'}</td>}
-                    <td>
-                      {p.current_risk
-                        ? <RiskBadge level={p.current_risk} />
-                        : <span className="muted">—</span>}
-                      {p.current_confidence != null && (
-                        <span className="muted small"> {Math.round(p.current_confidence * 100)}%</span>
-                      )}
-                    </td>
-                    <td>
-                      {p.current_trend_direction && p.current_trend_direction !== 'unknown'
-                        ? <span className={`trend-arrow trend-${p.current_trend_direction}`}>
-                            {p.current_trend_direction === 'increasing' ? '▲' : p.current_trend_direction === 'decreasing' ? '▼' : '▬'} {p.current_trend_status}
-                          </span>
-                        : <span className="muted">—</span>}
-                    </td>
+                    {!isAdmin && <td>{gestationalWeek != null ? `${gestationalWeek} wk` : '—'}</td>}
+                    {isAdmin && (
+                      <td>
+                        {p.current_risk
+                          ? <RiskBadge level={p.current_risk} />
+                          : <span className="muted">—</span>}
+                      </td>
+                    )}
+                    {isAdmin && (
+                      <td>
+                        {p.current_trend_direction && p.current_trend_direction !== 'unknown'
+                          ? <span className={`trend-arrow trend-${p.current_trend_direction}`}>
+                              {p.current_trend_direction === 'increasing' ? '▲' : p.current_trend_direction === 'decreasing' ? '▼' : '▬'} {p.current_trend_status}
+                            </span>
+                          : <span className="muted">—</span>}
+                      </td>
+                    )}
                     <td>{p.assessment_count ?? 0}</td>
-                    <td className="muted small">{p.last_assessment_date || '—'}</td>
-                    <td>{p.open_alert_count ?? 0}</td>
+                    {isAdmin
+                      ? <td>{p.last_assessed_by || '—'}</td>
+                      : <><td className="muted small">{p.last_assessment_date || '—'}</td><td>{p.last_assessed_by || '—'}</td></>}
                     <td className="cell-actions">
                       <Link className="btn btn-small btn-secondary"
                             to={`/app/patients/${p.id}?tab=${isAdmin ? 'history' : 'overview'}`}>

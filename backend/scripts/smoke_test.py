@@ -1,6 +1,6 @@
 """End-to-end smoke test of the healthcare-worker workflow through Django's test
 client: login -> create patient -> assessment -> prediction + SHAP + rules ->
-history/trend -> chat escalation -> chat fallback -> KB ingest + retrieve -> report PDF.
+history/trend -> educational chat -> KB ingest + retrieve -> report PDF.
 Run: python scripts/smoke_test.py (from backend/)
 """
 import json
@@ -107,7 +107,7 @@ check("history has 2 entries", r.status_code == 200 and len(J(r)["history"]) == 
 r = c.get(f"/api/assessments/risk-trends/?patient={patient_id}", **auth)
 check("trend computed", r.status_code == 200 and J(r)["trend"]["visits"] == 2)
 
-# --- chat: worker creates patient-scoped session, emergency path ---
+# --- chat: worker creates patient-scoped session; chat has no assessment alerts ---
 r = c.post("/api/chat/sessions/", {"patient": patient_id, "title": "smoke"},
            content_type="application/json", **auth)
 session_id = J(r)["session"]["id"]
@@ -116,8 +116,8 @@ check("chat session created for patient", r.status_code == 201 and J(r)["session
 r = c.post(f"/api/chat/sessions/{session_id}/send/", {"message": "I have severe vaginal bleeding and feel faint"},
            content_type="application/json", **auth)
 reply = J(r)["reply"]
-check("chat emergency escalation", reply["escalation"].get("escalate") is True, json.dumps(reply)[:200])
-check("chat escalation mode set", reply["generation_mode"] == "escalation")
+check("chat does not emit assessment alerts", reply["escalation"].get("escalate") is not True)
+check("chat does not use assessment escalation mode", reply["generation_mode"] != "escalation")
 
 r = c.post(f"/api/chat/sessions/{session_id}/send/", {"message": "What foods help with morning sickness?"},
            content_type="application/json", **auth)

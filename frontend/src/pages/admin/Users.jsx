@@ -1,95 +1,176 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import { adminService } from '../../services/auth'
 import { apiError } from '../../api/client'
 import { ErrorState, Loading } from '../../components/ui'
 
+const EMPTY_FORM = {
+  username: '',
+  email: '',
+  full_name: '',
+  phone: '',
+  password: '',
+}
+
 export default function AdminUsers() {
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState(null)
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
-  const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ username: '', email: '', full_name: '', phone: '', role: 'HEALTHCARE_WORKER', password: '' })
+  const [createRole, setCreateRole] = useState(null)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const isSuperuser = Boolean(currentUser?.is_superuser)
 
   async function reload() {
-    const u = await adminService.users()
-    setUsers(u.results ?? u)
+    const response = await adminService.users()
+    setUsers(response.results ?? response)
   }
 
   useEffect(() => { reload().catch(setError) }, [])
 
-  async function createUser(e) {
-    e.preventDefault()
+  function startCreate(role) {
+    setForm(EMPTY_FORM)
+    setCreateRole(role)
     setNotice(null)
-    try {
-      await adminService.createUser(form)
-      setNotice(`Created ${form.username} (${form.role}).`)
-      setShowCreate(false)
-      setForm({ username: '', email: '', full_name: '', phone: '', role: 'HEALTHCARE_WORKER', password: '' })
-      await reload()
-    } catch (err) { setNotice(apiError(err).message) }
   }
 
-  async function toggleActive(user) {
+  async function createUser(event) {
+    event.preventDefault()
+    setNotice(null)
     try {
-      await adminService.updateUser(user.id, { is_active: !user.is_active })
+      await adminService.createUser({ ...form, role: createRole })
+      setNotice(`Created ${form.username}.`)
+      setCreateRole(null)
+      setForm(EMPTY_FORM)
       await reload()
-    } catch (err) { setNotice(apiError(err).message) }
+    } catch (err) {
+      setNotice(apiError(err).message)
+    }
+  }
+
+  async function toggleActive(account) {
+    setNotice(null)
+    try {
+      await adminService.updateUser(account.id, { is_active: !account.is_active })
+      await reload()
+    } catch (err) {
+      setNotice(apiError(err).message)
+    }
   }
 
   if (error) return <div className="page"><ErrorState error={error} /></div>
   if (!users) return <div className="page"><Loading /></div>
+
+  const administrators = users.filter((account) => account.role === 'ADMIN')
+  const healthcareWorkers = users.filter((account) => account.role === 'HEALTHCARE_WORKER')
 
   return (
     <div className="page">
       <header className="page-head">
         <div>
           <h1>Users</h1>
-          <p className="muted">
-            Create and manage staff accounts. Patient assignments are retired —
-            every healthcare worker can see all patients.
-          </p>
+          <p className="muted">Manage administrator and healthcare worker accounts.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>+ New user</button>
       </header>
 
       {notice && <div className="alert alert-info">{notice}</div>}
 
-      {showCreate && (
-        <form className="card" onSubmit={createUser}>
-          <h2 className="section-title">Create user</h2>
-          <div className="grid-2">
-            <label className="field"><span>Username</span><input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required /></label>
-            <label className="field"><span>Email</span><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></label>
-            <label className="field"><span>Full name</span><input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></label>
-            <label className="field"><span>Phone</span><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
-            <label className="field"><span>Role</span>
-              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                <option value="HEALTHCARE_WORKER">Healthcare worker</option>
-                <option value="ADMIN">Administrator</option>
-              </select>
-            </label>
-            <label className="field"><span>Password</span><input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required autoComplete="new-password" /></label>
+      <section className="card">
+        <div className="page-head">
+          <div>
+            <h2 className="section-title">Administrators</h2>
+            {!isSuperuser && (
+              <p className="muted small">Only the initial superuser can create, activate, or deactivate administrator accounts.</p>
+            )}
           </div>
-          <div className="form-actions"><button className="btn btn-primary">Create</button></div>
-        </form>
-      )}
-
-      <div className="card">
-        <h2 className="section-title">All users</h2>
+          {isSuperuser && (
+            <button className="btn btn-secondary" onClick={() => startCreate('ADMIN')}>
+              + Create administrator
+            </button>
+          )}
+        </div>
         <table className="data-table">
-          <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Active</th><th>Joined</th><th></th></tr></thead>
+          <thead>
+            <tr><th>Username</th><th>Full name</th><th>Email</th><th>Status</th><th>Joined date</th>{isSuperuser && <th></th>}</tr>
+          </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className={!u.is_active ? 'row-muted' : ''}>
-                <td>{u.username}</td><td>{u.email}</td><td>{u.role}</td>
-                <td>{u.is_active ? 'Yes' : 'No'}</td>
-                <td>{new Date(u.date_joined).toLocaleDateString()}</td>
-                <td><button className="btn btn-small btn-secondary" onClick={() => toggleActive(u)}>{u.is_active ? 'Deactivate' : 'Reactivate'}</button></td>
+            {administrators.map((account) => (
+              <tr key={account.id} className={!account.is_active ? 'row-muted' : ''}>
+                <td>{account.username}{account.is_superuser && <span className="muted small"> · Superuser</span>}</td>
+                <td>{account.full_name || '—'}</td>
+                <td>{account.email || '—'}</td>
+                <td>{account.is_active ? 'Active' : 'Inactive'}</td>
+                <td>{new Date(account.date_joined).toLocaleDateString()}</td>
+                {isSuperuser && (
+                  <td>
+                    {!account.is_superuser && (
+                      <button className="btn btn-small btn-secondary" onClick={() => toggleActive(account)}>
+                        {account.is_active ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
+            {administrators.length === 0 && <tr><td colSpan={isSuperuser ? 6 : 5} className="muted">No administrator accounts.</td></tr>}
           </tbody>
         </table>
-      </div>
+      </section>
+
+      <section className="card">
+        <div className="page-head">
+          <div>
+            <h2 className="section-title">Healthcare workers</h2>
+            <p className="muted small">Patient counts include distinct patients with assessments recorded by each worker.</p>
+          </div>
+          <button className="btn btn-primary" onClick={() => startCreate('HEALTHCARE_WORKER')}>
+            + Create new healthcare worker
+          </button>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr><th>Username</th><th>Full name</th><th>Email</th><th>Patients handled</th><th>Joined date</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              {healthcareWorkers.map((account) => (
+                <tr key={account.id} className={!account.is_active ? 'row-muted' : ''}>
+                  <td><Link to={`/app/admin/users/${account.id}`}>{account.username}</Link></td>
+                  <td>{account.full_name || '—'}</td>
+                  <td>{account.email || '—'}</td>
+                  <td>{account.patients_handled ?? 0}</td>
+                  <td>{new Date(account.date_joined).toLocaleDateString()}</td>
+                  <td>{account.is_active ? 'Active' : 'Inactive'}</td>
+                  <td>
+                    <button className="btn btn-small btn-secondary" onClick={() => toggleActive(account)}>
+                      {account.is_active ? 'Deactivate' : 'Reactivate'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {healthcareWorkers.length === 0 && <tr><td colSpan="7" className="muted">No healthcare worker accounts.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {createRole && (
+        <form className="card" onSubmit={createUser}>
+          <div className="page-head">
+            <h2 className="section-title">Create {createRole === 'ADMIN' ? 'administrator' : 'healthcare worker'}</h2>
+            <button type="button" className="btn btn-ghost" onClick={() => setCreateRole(null)}>Cancel</button>
+          </div>
+          <div className="grid-2">
+            <label className="field"><span>Username</span><input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} required /></label>
+            <label className="field"><span>Email</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
+            <label className="field"><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
+            <label className="field"><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+            <label className="field"><span>Password</span><input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required autoComplete="new-password" /></label>
+          </div>
+          <div className="form-actions"><button className="btn btn-primary">Create account</button></div>
+        </form>
+      )}
     </div>
   )
 }

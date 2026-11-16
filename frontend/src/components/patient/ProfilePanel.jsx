@@ -14,6 +14,7 @@ const EMPTY = {
 
 export default function ProfilePanel({ patient, onSaved }) {
   const [form, setForm] = useState(() => ({ ...EMPTY, ...patient }))
+  const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState(null)
   const [error, setError] = useState(null)
@@ -39,6 +40,7 @@ export default function ProfilePanel({ patient, onSaved }) {
       const d = await patientService.update(patient.id, payload)
       setForm({ ...EMPTY, ...d })
       setNotice('Patient information saved.')
+      setEditing(false)
       if (onSaved) onSaved(d)
     } catch (err) {
       const e2 = apiError(err)
@@ -54,9 +56,61 @@ export default function ProfilePanel({ patient, onSaved }) {
     }
   }
 
+  if (!editing) {
+    const display = (value) => value === '' || value == null ? '—' : value
+    return (
+      <div className="card">
+        <div className="page-head">
+          <h2 className="section-title">Patient profile — {patient.patient_code}</h2>
+          <button type="button" className="btn btn-primary" onClick={() => setEditing(true)}>Edit information</button>
+        </div>
+        {notice && <div className="alert alert-success">{notice}</div>}
+        <h3 className="section-title">Personal information</h3>
+        <dl className="kv">
+          <div><dt>Full name</dt><dd>{display(patient.full_name)}</dd></div>
+          <div><dt>Email</dt><dd>{display(patient.email)}</dd></div>
+          <div><dt>Phone</dt><dd>{display(patient.phone)}</dd></div>
+          <div><dt>Date of birth</dt><dd>{display(patient.date_of_birth)}</dd></div>
+          <div><dt>Blood group</dt><dd>{display(patient.blood_group)}</dd></div>
+          <div><dt>Address</dt><dd>{display(patient.address)}</dd></div>
+          <div><dt>Gestational week at registration</dt><dd>{display(patient.gestational_week_at_registration)}</dd></div>
+          <div><dt>Estimated due date</dt><dd>{display(patient.estimated_due_date)}</dd></div>
+          <div><dt>Gravidity</dt><dd>{display(patient.gravidity)}</dd></div>
+          <div><dt>Parity</dt><dd>{display(patient.parity)}</dd></div>
+          <div><dt>Emergency contact</dt><dd>{display(patient.emergency_contact_name)}</dd></div>
+          <div><dt>Emergency contact phone</dt><dd>{display(patient.emergency_contact_phone)}</dd></div>
+        </dl>
+        <h3 className="section-title">Clinical information</h3>
+        <dl className="kv kv-lg">
+          <div><dt>Medical history</dt><dd>{display(patient.medical_history_notes)}</dd></div>
+          <div><dt>Previous pregnancy / obstetric history</dt><dd>{display(patient.obstetric_history_notes)}</dd></div>
+          <div><dt>Allergies</dt><dd>{display(patient.allergies)}</dd></div>
+          <div><dt>Current medications</dt><dd>{display(patient.current_medications)}</dd></div>
+          <div><dt>Additional clinical notes</dt><dd>{display(patient.additional_notes)}</dd></div>
+        </dl>
+      </div>
+    )
+  }
+
   return (
     <form className="card" onSubmit={onSubmit}>
-      <h2 className="section-title">Patient profile — {patient.patient_code}</h2>
+      <div className="page-head">
+        <h2 className="section-title">Edit patient profile — {patient.patient_code}</h2>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={saving}
+          onClick={() => {
+            setForm({ ...EMPTY, ...patient })
+            setErrors({})
+            setError(null)
+            setNotice(null)
+            setEditing(false)
+          }}
+        >
+          Cancel
+        </button>
+      </div>
       {notice && <div className="alert alert-success">{notice}</div>}
       {error && <div className="alert alert-error" role="alert">{error.message}</div>}
       <div className="grid-2">

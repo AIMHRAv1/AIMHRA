@@ -21,6 +21,14 @@ RISK_COLORS = {
 }
 
 
+def display_measurement_value(feature, value):
+    if feature == "hba1c":
+        return f"{(float(value) / 10.929 + 2.15):.1f}"
+    if feature == "fasting_glucose":
+        return f"{(float(value) * 18.0182):.1f}"
+    return str(value)
+
+
 def generate_report(assessment, generated_by):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -82,7 +90,8 @@ def generate_report(assessment, generated_by):
         ("Age (years)", assessment.age), ("Body temperature (F)", assessment.body_temperature),
         ("Heart rate (bpm)", assessment.heart_rate), ("Systolic BP (mm Hg)", assessment.systolic_bp),
         ("Diastolic BP (mm Hg)", assessment.diastolic_bp), ("BMI (kg/m2)", assessment.bmi),
-        ("HbA1c column value", assessment.hba1c), ("Fasting glucose column value", assessment.fasting_glucose),
+        ("HbA1c (%)", display_measurement_value("hba1c", assessment.hba1c)),
+        ("Fasting glucose (mg/dL)", display_measurement_value("fasting_glucose", assessment.fasting_glucose)),
     ]:
         rows.append([label, str(value)])
     table = Table(rows, colWidths=[70 * mm, 50 * mm])

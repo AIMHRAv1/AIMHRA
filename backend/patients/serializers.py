@@ -30,6 +30,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
     current_trend_status = serializers.SerializerMethodField()
     current_trend_direction = serializers.SerializerMethodField()
     assessment_count = serializers.SerializerMethodField()
+    last_assessed_by = serializers.SerializerMethodField()
     last_assessment_date = serializers.SerializerMethodField()
     open_alert_count = serializers.SerializerMethodField()
 
@@ -44,7 +45,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             "created_by", "created_by_name", "is_active", "archived_at",
             "created_at", "updated_at",
             "current_risk", "current_confidence", "assessment_count",
-            "last_assessment_date", "open_alert_count",
+            "last_assessed_by", "last_assessment_date", "open_alert_count",
             "current_trend_status", "current_trend_direction",
         ]
         read_only_fields = [
@@ -77,6 +78,9 @@ class PatientProfileSerializer(serializers.ModelSerializer):
 
     def get_assessment_count(self, obj):
         return self._summary(obj).get("assessment_count", 0)
+
+    def get_last_assessed_by(self, obj):
+        return self._summary(obj).get("last_assessed_by")
 
     def get_last_assessment_date(self, obj):
         return self._summary(obj).get("last_assessment_date")

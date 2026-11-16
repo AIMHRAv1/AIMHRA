@@ -12,6 +12,7 @@ import AdvisoryPanel from '../../components/patient/AdvisoryPanel'
 import ProfilePanel from '../../components/patient/ProfilePanel'
 import AlertsPanel from '../../components/patient/AlertsPanel'
 import ReportsPanel from '../../components/patient/ReportsPanel'
+import { ageFromDateOfBirth, currentGestationalWeek } from '../../utils/patientDates'
 import {
   IconBell, IconFileText, IconHeartPulse, IconLayoutDashboard, IconMessageSquare,
   IconOctagonAlert, IconPlusCircle, IconTrendingUp, IconUser,
@@ -28,16 +29,6 @@ const TABS = [
   { key: 'advisory', label: 'Care Advisory', Icon: IconHeartPulse },
   { key: 'reports', label: 'Reports', Icon: IconFileText },
 ]
-
-function computeAge(dateOfBirth) {
-  if (!dateOfBirth) return null
-  const dob = new Date(dateOfBirth)
-  const now = new Date()
-  let age = now.getFullYear() - dob.getFullYear()
-  const m = now.getMonth() - dob.getMonth()
-  if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age -= 1
-  return age >= 0 ? age : null
-}
 
 export default function PatientDetail() {
   const { id: idParam } = useParams()
@@ -94,7 +85,11 @@ export default function PatientDetail() {
     setPatient((prev) => ({ ...prev, ...updated }))
   }, [])
 
-  const age = useMemo(() => computeAge(patient?.date_of_birth), [patient])
+  const age = useMemo(() => ageFromDateOfBirth(patient?.date_of_birth), [patient])
+  const gestationalWeek = useMemo(
+    () => currentGestationalWeek(patient?.gestational_week_at_registration, patient?.created_at),
+    [patient],
+  )
   const openAlertCount = useMemo(
     () => alerts.filter((a) => a.status === 'OPEN').length,
     [alerts],
@@ -136,7 +131,7 @@ export default function PatientDetail() {
             <p className="muted">
               {patient.full_name || 'Unnamed patient'}
               {age != null && <span> · Age {age}</span>}
-              {patient.gestational_week_at_registration != null && <span> · Gest. wk {patient.gestational_week_at_registration}</span>}
+              {gestationalWeek != null && <span> · Gest. wk {gestationalWeek}</span>}
               {patient.blood_group && <span> · {patient.blood_group}</span>}
             </p>
           )}
@@ -155,7 +150,7 @@ export default function PatientDetail() {
             </span>
           ) : <span className="muted small">No assessment yet</span>}
           {!isAdmin && <button className="btn btn-primary" onClick={() => setTab('assessment')}>+ New Assessment</button>}
-          {!isAdmin && <button className="btn btn-secondary" onClick={() => setTab('info')}>Edit Patient</button>}
+          {!isAdmin && <button className="btn btn-secondary" onClick={() => setTab('info')}>Patient Information</button>}
         </div>
       </header>
 
@@ -195,7 +190,7 @@ export default function PatientDetail() {
             busy={busy}
           />
         )}
-        {tab === 'info' && <ProfilePanel patient={patient} onSaved={handlePatientSaved} />}
+        {tab === 'info' && <ProfilePanel key={patient.id} patient={patient} onSaved={handlePatientSaved} />}
         {tab === 'assessment' && (
           <AssessmentPanel
             patient={patient}

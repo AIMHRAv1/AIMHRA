@@ -31,6 +31,34 @@ export function RiskTrendChart({ series }) {
   )
 }
 
+/** A single clinical measurement over the patient's stored assessment visits. */
+export function MeasurementTrendChart({ visits, feature, label, unit }) {
+  const data = (visits || []).map((visit) => ({
+    date: visit.visit_date,
+    value: visit[feature],
+  }))
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e3e8ec" />
+        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+        <YAxis width={48} tick={{ fontSize: 10 }} />
+        <Tooltip formatter={(value) => [`${value} ${unit}`, label]} />
+        <Line
+          type="monotone"
+          dataKey="value"
+          name={label}
+          stroke="#1f6f8b"
+          strokeWidth={2}
+          dot={{ r: 3 }}
+          connectNulls
+          isAnimationActive={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
 /** Low/Mid/High distribution (counts). */
 export function RiskDistributionChart({ counts }) {
   const data = Object.entries(counts || {}).map(([name, value]) => ({ name, value }))

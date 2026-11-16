@@ -5,6 +5,8 @@ import { ShapBars } from '../../charts'
 import { CategoryBadge, Disclaimer, EmptyState, ErrorState, Loading, RiskBadge } from '../ui'
 import { IconAlertTriangle, IconOctagonAlert } from '../icons'
 import { AdvisoryCard } from './AdvisoryPanel'
+import { ageAtDateOfBirth } from '../../utils/patientDates'
+import { glucoseToMmolL, hbA1cToMmolMol, hbA1cToPercent } from '../../utils/glucoseUnits'
 
 const FIELDS = [
   { name: 'age', label: 'Age (years)', min: 14, max: 55, step: 1, hint: 'Plausible range 14–55' },
@@ -13,8 +15,8 @@ const FIELDS = [
   { name: 'systolic_bp', label: 'Systolic blood pressure (mm Hg)', min: 70, max: 250, step: 1 },
   { name: 'diastolic_bp', label: 'Diastolic blood pressure (mm Hg)', min: 40, max: 150, step: 1 },
   { name: 'bmi', label: 'BMI (kg/m²)', min: 12, max: 60, step: 0.1 },
-  { name: 'hba1c', label: 'Blood glucose — HbA1c column (dataset units)', min: 20, max: 60, step: 0.1, hint: 'Observed dataset range 30–50' },
-  { name: 'fasting_glucose', label: 'Blood glucose — fasting column (dataset units)', min: 2, max: 20, step: 0.1, hint: 'Observed dataset range 3.5–8.9' },
+  { name: 'hba1c', label: 'HbA1c (%)', min: 3.98, max: 7.64, step: 0.01, hint: 'Typical reference: 4.0–5.6%; model data coverage: about 4.9–6.7%.' },
+  { name: 'fasting_glucose', label: 'Fasting glucose (mg/dL)', min: 36, max: 360.4, step: 0.1, hint: 'Typical fasting reference: 70–99 mg/dL; model data coverage: about 63–160 mg/dL.' },
 ]
 
 const SYMPTOMS = [
@@ -68,6 +70,8 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
     () => `${patient?.patient_code || ''}${patient?.full_name ? ` · ${patient.full_name}` : ''}`,
     [patient],
   )
+  const calculatedAge = ageAtDateOfBirth(patient?.date_of_birth, form.visit_date)
+  const ageIsCalculated = Boolean(patient?.date_of_birth)
 
   function set(k, v) { setForm((f) => ({ ...f, [k]: v })) }
 
@@ -102,7 +106,14 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
         if (value === null || value === undefined || value === '') continue
         if (name === 'visit_date') next.visit_date = String(value)
         else if (name === 'gestational_week') next.gestational_week = String(Math.round(Number(value)))
-        else if (FIELDS.some((fl) => fl.name === name)) next[name] = String(value)
+        else if (name === 'age' && ageIsCalculated) continue
+        else if (name === 'hba1c') {
+          const scannedValue = Number(value)
+          next.hba1c = String(scannedValue > 20 ? hbA1cToPercent(scannedValue) : scannedValue)
+        } else if (name === 'fasting_glucose') {
+          const scannedValue = Number(value)
+          next.fasting_glucose = String(scannedValue > 20 ? scannedValue : scannedValue * 18.0182)
+        } else if (FIELDS.some((fl) => fl.name === name)) next[name] = String(value)
         applied[name] = next[name]
       }
       return next
@@ -112,7 +123,10 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
 
   function applySuggestion(field, value) {
     // Explicit operator action — suggestions are never auto-applied.
-    set(field, String(value))
+    let displayValue = Number(value)
+    if (field === 'hba1c' && displayValue > 20) displayValue = hbA1cToPercent(displayValue)
+    if (field === 'fasting_glucose' && displayValue <= 20) displayValue *= 18.0182
+    set(field, String(displayValue))
   }
 
   function resetScan() {
@@ -135,8 +149,9 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
     const errs = {}
     if (!form.visit_date) errs.visit_date = 'Visit date is required.'
     for (const f of FIELDS) {
-      const v = parseFloat(form[f.name])
-      if (form[f.name] === '' || Number.isNaN(v)) errs[f.name] = 'This field is required.'
+      const fieldValue = f.name === 'age' && ageIsCalculated ? calculatedAge : form[f.name]
+      const v = parseFloat(fieldValue)
+      if (fieldValue === '' || fieldValue == null || Number.isNaN(v)) errs[f.name] = 'This field is required.'
       else if (v < f.min || v > f.max) errs[f.name] = `Must be between ${f.min} and ${f.max}.`
     }
     if (form.gestational_week !== '' && (form.gestational_week < 1 || form.gestational_week > 45)) {
@@ -154,6 +169,7 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
     if (mode !== 'scan' || !scan.result) return []
     const out = []
     for (const [name, entry] of Object.entries(scan.result.fields || {})) {
+      if (name === 'age' && ageIsCalculated) continue
       const uncertain = entry.valid === false || entry.warning || entry.suggestion || entry.candidates
       if (uncertain && !checkedFields[name]) out.push(name)
     }
@@ -176,11 +192,14 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
     try {
       const payload = {
         ...form,
+        age: ageIsCalculated ? calculatedAge : Number(form.age),
         patient: patient.id,
         gestational_week: form.gestational_week === '' ? null : Number(form.gestational_week),
         data_source: mode === 'scan' && scan.result ? 'ocr_assisted' : 'manual',
       }
       for (const f of FIELDS) payload[f.name] = Number(payload[f.name])
+      payload.hba1c = Number(hbA1cToMmolMol(form.hba1c).toFixed(2))
+      payload.fasting_glucose = Number(glucoseToMmolL(form.fasting_glucose).toFixed(2))
       const data = await assessmentService.create(payload)
       setResult(data)
       setForm(initialValues())
@@ -269,11 +288,16 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
               <div className="grid-2">
                 {FIELDS.map((f) => {
                   const crop = scan.result?.fields?.[f.name]?.crop_image
+                  const fieldValue = f.name === 'age' && ageIsCalculated ? calculatedAge ?? '' : form[f.name]
                   return (
                     <label className="field" key={f.name}>
-                      <span>{f.label} {scanBadge(scan.result, f.name)}</span>
+                      <span>
+                        {ageIsCalculated && f.name === 'age' ? 'Age (years, from date of birth)' : f.label}
+                        {' '}{!(ageIsCalculated && f.name === 'age') && scanBadge(scan.result, f.name)}
+                      </span>
                       <input type="number" inputMode="decimal" min={f.min} max={f.max} step={f.step}
-                             value={form[f.name]} onChange={(e) => set(f.name, e.target.value)} required />
+                             value={fieldValue} onChange={(e) => set(f.name, e.target.value)}
+                             readOnly={ageIsCalculated && f.name === 'age'} required />
                       {f.hint && <small className="field-hint">{f.hint}</small>}
                       {scanWarn(scan.result, f.name, applySuggestion)}
                       {errors[f.name] && <em className="field-error">{errors[f.name]}</em>}

@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { assessmentService, reportService } from '../../services/auth'
 import { apiError } from '../../api/client'
-import { RiskTrendChart } from '../../charts'
+import { MeasurementTrendChart, RiskTrendChart } from '../../charts'
 import { Disclaimer, EmptyState, ErrorState, Loading, RiskBadge } from '../ui'
 import { downloadReport } from '../../utils/reportDownload'
+import { toDisplayMeasurement } from '../../utils/glucoseUnits'
+
+const MEASUREMENT_DETAILS = {
+  age: { label: 'Age', unit: 'years' },
+  body_temperature: { label: 'Body temperature', unit: '°F' },
+  heart_rate: { label: 'Heart rate', unit: 'bpm' },
+  systolic_bp: { label: 'Systolic blood pressure', unit: 'mm Hg' },
+  diastolic_bp: { label: 'Diastolic blood pressure', unit: 'mm Hg' },
+  bmi: { label: 'BMI', unit: 'kg/m²' },
+  hba1c: { label: 'HbA1c', unit: '%' },
+  fasting_glucose: { label: 'Fasting glucose', unit: 'mg/dL' },
+}
 
 export default function HistoryPanel({ patientId, showReportActions = true }) {
   const [data, setData] = useState(null)
@@ -41,21 +53,42 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
   const series = data.series ?? []
   const trend = data.trend
   const measurements = data.measurements
+  const displayVisits = (measurements?.visits ?? []).map((visit) => ({
+    ...visit,
+    hba1c: toDisplayMeasurement('hba1c', visit.hba1c),
+    fasting_glucose: toDisplayMeasurement('fasting_glucose', visit.fasting_glucose),
+  }))
   const comparisons = measurements?.comparisons ?? []
+
+  if (!showReportActions) {
+    return (
+      <div className="card">
+        <h2 className="section-title">Assessment history</h2>
+        {series.length === 0 ? (
+          <EmptyState title="No assessments yet" hint="Assessment history will appear here after a healthcare worker records an assessment." />
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr><th>Date</th><th>Healthcare worker</th><th>Risk</th></tr>
+            </thead>
+            <tbody>
+              {series.slice().reverse().map((assessment) => (
+                <tr key={assessment.id}>
+                  <td>{assessment.visit_date}</td>
+                  <td>{assessment.recorded_by || '—'}</td>
+                  <td><RiskBadge level={assessment.risk_level} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="stack">
       {notice && <div className="alert alert-info">{notice}</div>}
-
-      {Array.isArray(data.treating_workers) && data.treating_workers.length > 0 && (
-        <div className="card">
-          <h2 className="section-title">Treating health workers</h2>
-          <p className="muted">
-            {data.treating_workers.join(', ')}
-          </p>
-          <p className="muted small">Record creator and the workers who recorded each assessment, most recent first.</p>
-        </div>
-      )}
 
       {series.length === 0 ? (
         <EmptyState title="No assessments yet" hint="Complete a New Assessment to start the patient's risk history." />
@@ -69,6 +102,29 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
             </p>
             <p className="muted small">Trends describe stored assessments only — the system does not predict future risk.</p>
           </div>
+
+          {measurements && measurements.visits?.length > 0 && (
+            <div className="card">
+              <h2 className="section-title">Parameter trends over time</h2>
+              <div className="measurement-charts">
+                {measurements.features.map((feature) => {
+                  const detail = MEASUREMENT_DETAILS[feature] || { label: feature, unit: '' }
+                  return (
+                    <section className="measurement-chart" key={feature}>
+                      <h3>{detail.label} <span className="muted small">({detail.unit})</span></h3>
+                      <MeasurementTrendChart
+                        visits={displayVisits}
+                        feature={feature}
+                        label={detail.label}
+                        unit={detail.unit}
+                      />
+                    </section>
+                  )
+                })}
+              </div>
+              <p className="muted small">Glucose values are converted from the model's stored scales for display.</p>
+            </div>
+          )}
 
           {measurements && measurements.visits?.length > 0 && (
             <div className="card">
@@ -87,18 +143,30 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
                   <tbody>
                     {measurements.features.map((feature) => {
                       const cmp = comparisons.find((c) => c.feature === feature)
+                      const detail = MEASUREMENT_DETAILS[feature] || { label: feature, unit: '' }
+                      const previousValue = cmp ? toDisplayMeasurement(feature, cmp.previous_value) : null
+                      const latestValue = cmp ? toDisplayMeasurement(feature, cmp.latest_value) : null
+                      const converted = feature === 'hba1c' || feature === 'fasting_glucose'
+                      const displayedDelta = cmp
+                        ? converted ? Number((latestValue - previousValue).toFixed(1)) : cmp.delta
+                        : null
+                      const displayedPercentChange = cmp
+                        ? converted && previousValue !== 0
+                          ? Number(((latestValue - previousValue) / Math.abs(previousValue) * 100).toFixed(1))
+                          : cmp.percent_change
+                        : null
                       return (
                         <tr key={feature}>
-                          <td>{cmp?.label ?? feature}</td>
-                          {measurements.visits.map((v) => (
-                            <td key={v.assessment_id}>{v[feature]}</td>
+                          <td>{detail.label} ({detail.unit})</td>
+                          {displayVisits.map((v) => (
+                            <td key={v.assessment_id}>{v[feature]} {detail.unit}</td>
                           ))}
                           <td>
                             {cmp ? (
                               <>
-                                {cmp.delta > 0 ? '+' : ''}{cmp.delta ?? '—'}
-                                {cmp.percent_change != null && (
-                                  <span className="muted small"> ({cmp.percent_change > 0 ? '+' : ''}{cmp.percent_change}%)</span>
+                                {displayedDelta > 0 ? '+' : ''}{displayedDelta ?? '—'} {detail.unit}
+                                {displayedPercentChange != null && (
+                                  <span className="muted small"> ({displayedPercentChange > 0 ? '+' : ''}{displayedPercentChange}%)</span>
                                 )}
                                 <span className="muted small"> {cmp.direction}</span>
                               </>
@@ -118,9 +186,13 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
               )}
               {data.measurement_rules?.triggered?.length > 0 && (
                 <ul className="rule-list">
-                  {data.measurement_rules.triggered.map((t) => (
-                    <li key={t.id}><code>{t.id}</code> {t.description} — {t.feature} changed by {t.delta}</li>
-                  ))}
+                  {data.measurement_rules.triggered.map((t) => {
+                    const detail = MEASUREMENT_DETAILS[t.feature] || { unit: '' }
+                    const delta = toDisplayMeasurement(t.feature, t.delta) - toDisplayMeasurement(t.feature, 0)
+                    return (
+                      <li key={t.id}><code>{t.id}</code> {t.description} — {t.feature} changed by {Number(delta.toFixed(1))} {detail.unit}</li>
+                    )
+                  })}
                 </ul>
               )}
             </div>

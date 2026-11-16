@@ -1,12 +1,11 @@
-"""Deterministic symptom-keyword detection for free-text chat messages.
+"""Deterministic symptom-keyword extraction for free-text callers.
 
-Part of the rule engine (v1): maps phrases to the fixed symptom vocabulary so
-the emergency rule engine can evaluate chat input the same way it evaluates
-assessments. Purely lexical — no LLM involvement.
+The chat assistant deliberately does not invoke this mapping; assessment rules
+use symptoms explicitly recorded with the assessment.
 """
 
 KEYWORD_MAP = {
-    "convulsions": ["convulsion", "seizure", "fit", "fits", "eclampsia"],
+    "convulsions": ["convulsion", "seizure", "fit", "fits"],
     "vaginal_bleeding": ["vaginal bleeding", "bleeding", "blood loss", "hemorrhage", "haemorrhage"],
     "difficulty_breathing": ["difficulty breathing", "can't breathe", "cant breathe", "shortness of breath", "breathless", "struggling to breathe"],
     "severe_headache": ["severe headache", "bad headache", "worst headache", "terrible headache", "migraine"],

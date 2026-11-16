@@ -240,6 +240,62 @@ class AdminPatientPrivacyTests(TestCase):
         self.assertIsNone(results[0]["full_name"])
         self.assertEqual(results[0]["patient_code"], self.patient.patient_code)
 
+    def test_admin_list_includes_latest_assessing_worker(self):
+        from assessments.models import Assessment, Prediction
+
+        other_worker = make_user("pworker2")
+        previous_assessment = Assessment.objects.create(
+            patient=self.patient,
+            created_by=self.worker,
+            visit_date="2026-10-01",
+            age=28,
+            body_temperature=98.4,
+            heart_rate=86,
+            systolic_bp=120,
+            diastolic_bp=78,
+            bmi=23,
+            hba1c=38,
+            fasting_glucose=5.5,
+        )
+        Prediction.objects.create(
+            assessment=previous_assessment,
+            risk_level="high risk",
+            probability=0.9,
+            probabilities={},
+            explanation={},
+            model_name="test-model",
+            model_version="1",
+        )
+        assessment = Assessment.objects.create(
+            patient=self.patient,
+            created_by=other_worker,
+            visit_date="2026-10-12",
+            age=28,
+            body_temperature=98.4,
+            heart_rate=86,
+            systolic_bp=120,
+            diastolic_bp=78,
+            bmi=23,
+            hba1c=38,
+            fasting_glucose=5.5,
+        )
+        Prediction.objects.create(
+            assessment=assessment,
+            risk_level="low risk",
+            probability=0.9,
+            probabilities={},
+            explanation={},
+            model_name="test-model",
+            model_version="1",
+        )
+
+        r = self.client.get("/api/patients/", **self.admin_auth)
+        self.assertEqual(r.status_code, 200, r.content)
+        patient = r.json()["data"]["results"][0]
+        self.assertEqual(patient["assessment_count"], 2)
+        self.assertEqual(patient["current_risk"], "low risk")
+        self.assertEqual(patient["last_assessed_by"], other_worker.username)
+
     def test_worker_still_sees_full_patient_information(self):
         r = self.client.get(f"/api/patients/{self.patient.id}/", **self.worker_auth)
         self.assertEqual(r.status_code, 200)

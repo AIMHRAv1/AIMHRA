@@ -92,5 +92,6 @@ export const adminService = {
   users: () => api.get('/auth/users/'),
   createUser: (payload) => api.post('/auth/users/', payload),
   updateUser: (id, payload) => api.patch(`/auth/users/${id}/`, payload),
+  healthcareWorkerActivity: (id) => api.get(`/auth/users/${id}/activity/`),
   auditLogs: (params) => api.get('/audit/', { params }),
 }

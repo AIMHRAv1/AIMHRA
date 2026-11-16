@@ -11,6 +11,7 @@ import Alerts from './pages/hcw/Alerts'
 import HcwReports from './pages/hcw/Reports'
 import AdminDashboard from './pages/admin/Dashboard'
 import AdminUsers from './pages/admin/Users'
+import AdminHealthcareWorker from './pages/admin/HealthcareWorker'
 import AdminModels from './pages/admin/Models'
 import AdminKnowledge from './pages/admin/Knowledge'
 import AdminAudit from './pages/admin/Audit'
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="reports" element={<ProtectedRoute roles={['HEALTHCARE_WORKER', 'ADMIN']}><HcwReports /></ProtectedRoute>} />
 
         <Route path="admin/users" element={<ProtectedRoute roles={['ADMIN']}><AdminUsers /></ProtectedRoute>} />
+        <Route path="admin/users/:id" element={<ProtectedRoute roles={['ADMIN']}><AdminHealthcareWorker /></ProtectedRoute>} />
         <Route path="admin/models" element={<ProtectedRoute roles={['ADMIN']}><AdminModels /></ProtectedRoute>} />
         <Route path="admin/knowledge" element={<ProtectedRoute roles={['ADMIN']}><AdminKnowledge /></ProtectedRoute>} />
         <Route path="admin/audit" element={<ProtectedRoute roles={['ADMIN']}><AdminAudit /></ProtectedRoute>} />

@@ -5,7 +5,7 @@ from audit.models import AuditLog
 from django.test import TestCase
 from patients.models import PatientProfile
 from reports.models import Report
-from reports.services import generate_report
+from reports.services import display_measurement_value, generate_report
 from rest_framework_simplejwt.tokens import RefreshToken
 
 PAYLOAD = {
@@ -13,6 +13,12 @@ PAYLOAD = {
     "systolic_bp": 150, "diastolic_bp": 96, "bmi": 25.0,
     "hba1c": 40.0, "fasting_glucose": 6.0,
 }
+
+
+class ReportUnitDisplayTests(TestCase):
+    def test_glucose_values_are_formatted_in_common_units(self):
+        self.assertEqual(display_measurement_value("hba1c", 40), "5.8")
+        self.assertEqual(display_measurement_value("fasting_glucose", 6), "108.1")
 
 
 class ReportTests(TestCase):

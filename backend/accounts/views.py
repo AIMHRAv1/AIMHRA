@@ -1,5 +1,7 @@
 import logging
 
+from django.db.models import Count
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,6 +17,7 @@ from accounts.serializers import (
     UserSerializer,
 )
 from audit import services as audit_svc
+from core.exceptions import ApiError
 from core.permissions import IsAdmin
 
 logger = logging.getLogger(__name__)
@@ -105,10 +108,14 @@ class UserManagementView(generics.ListCreateAPIView):
     """Admin-only user management. Creates staff/admin/healthcare-worker accounts."""
 
     permission_classes = [IsAdmin]
-    queryset = User.objects.all().order_by("-date_joined")
 
     def get_serializer_class(self):
         return UserAdminSerializer
+
+    def get_queryset(self):
+        return User.objects.all().order_by("-date_joined").annotate(
+            patients_handled=Count("assessments_entered__patient", distinct=True)
+        )
 
     def perform_create(self, serializer):
         from django.contrib.auth.password_validation import validate_password
@@ -129,6 +136,16 @@ class UserManagementDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UserAdminSerializer
 
+    def get_object(self):
+        user = super().get_object()
+        if user.is_superuser and not self.request.user.is_superuser:
+            raise ApiError(
+                "Only a superuser can manage another superuser account.",
+                code="PERMISSION_DENIED",
+                status_code=403,
+            )
+        return user
+
     def perform_update(self, serializer):
         user = serializer.save()
         audit_svc.log_event(
@@ -138,9 +155,64 @@ class UserManagementDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_destroy(self, instance):
         # Soft-delete style: deactivate instead of deleting, preserving audit history.
+        if instance.role == User.ROLE_ADMIN and not self.request.user.is_superuser:
+            raise ApiError(
+                "Only a superuser can deactivate an administrator.",
+                code="PERMISSION_DENIED",
+                status_code=403,
+            )
+        if instance.is_superuser:
+            raise ApiError(
+                "A superuser account cannot be deactivated.",
+                code="PERMISSION_DENIED",
+                status_code=403,
+            )
         instance.is_active = False
         instance.save(update_fields=["is_active"])
         audit_svc.log_event(
             self.request, "USER_UPDATED", target_type="user", target_id=str(instance.id),
             detail={"deactivated": True},
+        )
+
+
+class HealthcareWorkerActivityView(APIView):
+    """Admin view of one healthcare worker and their patient assessment totals."""
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request, pk):
+        worker = get_object_or_404(User, pk=pk, role=User.ROLE_HEALTHCARE_WORKER)
+        from assessments.models import Assessment
+
+        patient_activity = {}
+        assessments = (
+            Assessment.objects.filter(created_by=worker)
+            .select_related("patient", "prediction")
+            .order_by("patient_id", "visit_date", "id")
+        )
+        for assessment in assessments:
+            entry = patient_activity.get(assessment.patient_id)
+            if entry is None:
+                entry = {
+                    "patient_code": assessment.patient.patient_code,
+                    "assessment_count": 0,
+                    "last_assessed_date": None,
+                    "latest_risk": None,
+                }
+                patient_activity[assessment.patient_id] = entry
+            entry["assessment_count"] += 1
+            entry["last_assessed_date"] = assessment.visit_date.isoformat()
+            prediction = getattr(assessment, "prediction", None)
+            entry["latest_risk"] = prediction.risk_level if prediction else None
+
+        user_data = UserAdminSerializer(worker).data
+        user_data["patients_handled"] = len(patient_activity)
+        return Response(
+            {
+                "success": True,
+                "data": {
+                    "user": user_data,
+                    "patients": list(patient_activity.values()),
+                },
+            }
         )
