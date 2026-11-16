@@ -61,7 +61,7 @@ check("self-registration removed (404)", r.status_code == 404, r.content[:200])
 r = c.post("/api/patients/", {
     "full_name": "Smoke Patient", "email": "patient@example.com", "phone": "+9771000000000",
     "date_of_birth": "1998-05-12", "blood_group": "O+",
-    "gestational_week_at_registration": 24, "gravidity": 1, "parity": 0,
+    "gestational_week_at_registration": 24,
     "medical_history_notes": "", "allergies": "NKDA",
 }, content_type="application/json", **auth)
 check("patient created", r.status_code == 201, r.content[:300])

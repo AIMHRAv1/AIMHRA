@@ -1,8 +1,13 @@
 """Patient-record management tests: standalone records owned by healthcare
 workers, created via API, scoped by access control."""
-from django.test import TestCase
+from io import BytesIO
+import tempfile
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
+from PIL import Image
 
 from accounts.models import User
 from patients.models import PatientAssignment, PatientProfile
@@ -26,8 +31,6 @@ VALID_PATIENT = {
     "blood_group": "O+",
     "gestational_week_at_registration": 24,
     "estimated_due_date": "2026-12-20",
-    "gravidity": 2,
-    "parity": 1,
     "medical_history_notes": "",
     "allergies": "",
     "address": "Kathmandu",
@@ -61,10 +64,45 @@ class PatientApiTests(TestCase):
         self.assertEqual(data["full_name"], "Example Patient")
         self.assertEqual(data["created_by"], self.worker.id)
         self.assertEqual(data["current_medications"], "Folic acid 5mg")
+        self.assertNotIn("gravidity", data)
+        self.assertNotIn("parity", data)
 
         patient = PatientProfile.objects.get(pk=data["id"])
         self.assertEqual(patient.created_by_id, self.worker.id)
         self.assertTrue(patient.is_active)
+
+    def test_worker_can_upload_patient_photo_and_admin_cannot_view_it(self):
+        image_buffer = BytesIO()
+        Image.new("RGB", (2, 2), color="blue").save(image_buffer, format="PNG")
+        image = SimpleUploadedFile("patient.png", image_buffer.getvalue(), content_type="image/png")
+
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                response = self.client.post(
+                    "/api/patients/",
+                    {**VALID_PATIENT, "photo": image},
+                    **self.worker_auth,
+                )
+                self.assertEqual(response.status_code, 201, response.content)
+                patient_id = response.json()["data"]["id"]
+                self.assertTrue(response.json()["data"]["photo_url"].endswith(".png"))
+
+                worker_response = self.client.get(
+                    f"/api/patients/{patient_id}/",
+                    **self.worker_auth,
+                )
+                self.assertTrue(worker_response.json()["photo_url"].endswith(".png"))
+
+                admin_response = self.client.get("/api/patients/", **self.admin_auth)
+                admin_patient = admin_response.json()["data"]["results"][0]
+                self.assertIsNone(admin_patient["photo"])
+                self.assertIsNone(admin_patient["photo_url"])
+                admin_detail = self.client.get(
+                    f"/api/patients/{patient_id}/",
+                    **self.admin_auth,
+                )
+                self.assertIsNone(admin_detail.json()["photo"])
+                self.assertIsNone(admin_detail.json()["photo_url"])
 
     def test_patient_code_is_generated_server_side(self):
         r = self.client.post(
@@ -241,9 +279,20 @@ class AdminPatientPrivacyTests(TestCase):
         self.assertEqual(results[0]["patient_code"], self.patient.patient_code)
 
     def test_admin_list_includes_latest_assessing_worker(self):
+        from io import BytesIO
+        from tempfile import TemporaryDirectory
+
+        from PIL import Image
+        from django.core.files.base import ContentFile
         from assessments.models import Assessment, Prediction
 
         other_worker = make_user("pworker2")
+        image_buffer = BytesIO()
+        Image.new("RGB", (2, 2), "green").save(image_buffer, format="PNG")
+        media_root = TemporaryDirectory()
+        self.addCleanup(media_root.cleanup)
+        with override_settings(MEDIA_ROOT=media_root.name):
+            other_worker.photo.save("worker.png", ContentFile(image_buffer.getvalue()), save=True)
         previous_assessment = Assessment.objects.create(
             patient=self.patient,
             created_by=self.worker,
@@ -289,12 +338,23 @@ class AdminPatientPrivacyTests(TestCase):
             model_version="1",
         )
 
-        r = self.client.get("/api/patients/", **self.admin_auth)
+        with override_settings(MEDIA_ROOT=media_root.name):
+            r = self.client.get("/api/patients/", **self.admin_auth)
+            history = self.client.get(
+                f"/api/assessments/risk-trends/?patient={self.patient.id}",
+                **self.admin_auth,
+            )
         self.assertEqual(r.status_code, 200, r.content)
         patient = r.json()["data"]["results"][0]
         self.assertEqual(patient["assessment_count"], 2)
         self.assertEqual(patient["current_risk"], "low risk")
         self.assertEqual(patient["last_assessed_by"], other_worker.username)
+        self.assertIn("/media/users/profile_photos/", patient["last_assessed_by_photo_url"])
+        self.assertEqual(history.status_code, 200, history.content)
+        self.assertIn(
+            "/media/users/profile_photos/",
+            history.json()["data"]["series"][-1]["recorded_by_photo_url"],
+        )
 
     def test_worker_still_sees_full_patient_information(self):
         r = self.client.get(f"/api/patients/{self.patient.id}/", **self.worker_auth)

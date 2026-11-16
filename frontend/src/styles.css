@@ -51,7 +51,7 @@ code { background: #eef2f5; padding: 1px 5px; border-radius: 4px; font-size: 0.8
 .side-link:hover { background: #ffffff14; }
 .side-link.active { background: #ffffff24; color: #fff; font-weight: 600; }
 .sidebar-footer { padding: 12px; border-top: 1px solid #ffffff1f; }
-.user-chip { margin-bottom: 8px; }
+.user-chip { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; min-width: 0; }
 .user-name { font-weight: 600; font-size: 0.92rem; color: #fff; overflow: hidden; text-overflow: ellipsis; }
 .user-role { font-size: 0.75rem; opacity: 0.75; }
 
@@ -155,6 +155,14 @@ input:focus, textarea:focus, select:focus { outline: 2px solid #9cc3d2; border-c
 .data-table tr:hover td { background: #f7fafb; }
 .table-scroll .patient-list-table { min-width: 1040px; }
 .patient-list-table th, .patient-list-table td { white-space: nowrap; }
+.worker-cell { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; white-space: nowrap; }
+.worker-avatar { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; border-radius: 50%; object-fit: cover; background: #e8eef0; color: #64747a; }
+.worker-avatar-placeholder { border: 1px solid #d5dfe2; }
+.worker-profile { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.patient-identification-card { display: inline-flex; align-items: center; gap: 16px; padding: 14px 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.patient-identification-card h1 { margin: 0; }
+.patient-detail-identity { min-width: 0; }
+.patient-profile-heading, .patient-form-heading { display: flex; align-items: center; gap: 14px; }
 .patient-list-contact { max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
 .row-danger td { background: var(--emergency-soft); }
 .row-warn td { background: var(--mid-soft); }
@@ -163,6 +171,38 @@ input:focus, textarea:focus, select:focus { outline: 2px solid #9cc3d2; border-c
 .cell-message { max-width: 380px; }
 .cell-detail { max-width: 320px; overflow-wrap: anywhere; }
 .cell-actions { display: flex; gap: 6px; }
+.global-alert-list { padding: 0; overflow: hidden; }
+.global-alert-head, .global-alert-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(125px, 0.9fr) minmax(200px, 2fr) minmax(210px, 1.4fr);
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+}
+.global-alert-head {
+  background: #f6f8f9;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.global-alert-row { border-bottom: 1px solid var(--line); }
+.global-alert-row:last-child { border-bottom: 0; }
+.global-alert-row.is-emergency { border-left: 4px solid var(--emergency, #c72e2e); }
+.global-alert-row.is-high-concern { border-left: 4px solid var(--high, #d99518); }
+.global-alert-patient { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.global-alert-patient time { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+.global-alert-message { display: flex; flex-direction: column; gap: 2px; min-width: 0; margin: 0; }
+.global-alert-message strong, .global-alert-message span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-alert-message strong { font-size: 0.82rem; }
+.global-alert-message span { color: var(--muted); font-size: 0.78rem; }
+.global-alert-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
 
 /* ---------- Assessment form ---------- */
@@ -239,6 +279,14 @@ input:focus, textarea:focus, select:focus { outline: 2px solid #9cc3d2; border-c
   .sidebar-footer { border-top: none; border-left: 1px solid #ffffff1f; display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
   .main-area { padding: 18px 14px 40px; }
   .grid-2, .grid-2-cards, .detail-grid, .chat-layout { grid-template-columns: 1fr; }
+  .global-alert-head, .global-alert-row { grid-template-columns: minmax(100px, 0.7fr) minmax(120px, 0.8fr) minmax(160px, 1.5fr) auto; gap: 10px; padding: 10px 12px; }
+}
+@media (max-width: 620px) {
+  .global-alert-head { display: none; }
+  .global-alert-row { grid-template-columns: 1fr auto; gap: 8px 12px; }
+  .global-alert-row > :nth-child(2) { grid-column: 2; grid-row: 1; }
+  .global-alert-message { grid-column: 1 / -1; }
+  .global-alert-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
 
 /* --- Care advisory --- */

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from accounts.utils import user_photo_url
 from patients.models import PatientAssignment, PatientProfile
 
 # Fields that identify or describe the patient personally. Administrators
@@ -8,9 +9,9 @@ from patients.models import PatientAssignment, PatientProfile
 # flag). Clinical analytics (risk, counts, dates) stay visible so admins can
 # still follow history, trends and reports.
 PII_FIELDS = [
-    "full_name", "email", "phone", "address", "date_of_birth", "blood_group",
-    "gestational_week_at_registration", "estimated_due_date", "gravidity",
-    "parity", "medical_history_notes", "allergies", "emergency_contact_name",
+    "full_name", "photo", "photo_url", "email", "phone", "address", "date_of_birth", "blood_group",
+    "gestational_week_at_registration", "estimated_due_date",
+    "medical_history_notes", "allergies", "emergency_contact_name",
     "emergency_contact_phone", "obstetric_history_notes", "current_medications",
     "additional_notes",
 ]
@@ -25,27 +26,30 @@ class PatientProfileSerializer(serializers.ModelSerializer):
     code and clinical analytics only."""
 
     created_by_name = serializers.CharField(source="created_by.full_name", read_only=True, default="")
+    photo_url = serializers.SerializerMethodField()
     current_risk = serializers.SerializerMethodField()
     current_confidence = serializers.SerializerMethodField()
     current_trend_status = serializers.SerializerMethodField()
     current_trend_direction = serializers.SerializerMethodField()
     assessment_count = serializers.SerializerMethodField()
     last_assessed_by = serializers.SerializerMethodField()
+    last_assessed_by_photo_url = serializers.SerializerMethodField()
     last_assessment_date = serializers.SerializerMethodField()
     open_alert_count = serializers.SerializerMethodField()
 
     class Meta:
         model = PatientProfile
         fields = [
-            "id", "patient_code", "full_name", "email", "phone", "address",
+            "id", "patient_code", "full_name", "photo", "photo_url", "email", "phone", "address",
             "date_of_birth", "blood_group", "gestational_week_at_registration",
-            "estimated_due_date", "gravidity", "parity", "medical_history_notes",
+            "estimated_due_date", "medical_history_notes",
             "allergies", "emergency_contact_name", "emergency_contact_phone",
             "obstetric_history_notes", "current_medications", "additional_notes",
             "created_by", "created_by_name", "is_active", "archived_at",
             "created_at", "updated_at",
             "current_risk", "current_confidence", "assessment_count",
             "last_assessed_by", "last_assessment_date", "open_alert_count",
+            "last_assessed_by_photo_url",
             "current_trend_status", "current_trend_direction",
         ]
         read_only_fields = [
@@ -62,7 +66,17 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         if self.context.get("redact_pii"):
             for field in PII_FIELDS:
                 data[field] = None
+            data["photo"] = None
+            data["photo_url"] = None
         return data
+
+    def get_photo_url(self, obj):
+        return user_photo_url(obj.photo, self.context.get("request"))
+
+    def validate_photo(self, value):
+        if value and value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Photo must be 5 MB or smaller.")
+        return value
 
     def get_current_risk(self, obj):
         return self._summary(obj).get("current_risk")
@@ -82,16 +96,17 @@ class PatientProfileSerializer(serializers.ModelSerializer):
     def get_last_assessed_by(self, obj):
         return self._summary(obj).get("last_assessed_by")
 
+    def get_last_assessed_by_photo_url(self, obj):
+        return user_photo_url(
+            self._summary(obj).get("last_assessed_by_photo"),
+            self.context.get("request"),
+        )
+
     def get_last_assessment_date(self, obj):
         return self._summary(obj).get("last_assessment_date")
 
     def get_open_alert_count(self, obj):
         return self._summary(obj).get("open_alert_count", 0)
-
-    def validate_gravidity(self, value):
-        if value is not None and value > 30:
-            raise serializers.ValidationError("Gravidity looks implausible (max 30).")
-        return value
 
     def validate_gestational_week_at_registration(self, value):
         if value is not None and not (1 <= value <= 45):

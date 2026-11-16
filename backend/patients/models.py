@@ -34,6 +34,7 @@ class PatientProfile(models.Model):
 
     # Demographics / contact
     full_name = models.CharField(max_length=128, blank=True, default="")
+    photo = models.ImageField(upload_to="patients/profile_photos/", blank=True, null=True)
     email = models.EmailField(blank=True, default="")
     phone = models.CharField(max_length=32, blank=True, default="")
     address = models.TextField(blank=True, default="")

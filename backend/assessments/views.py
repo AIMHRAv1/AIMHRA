@@ -89,7 +89,7 @@ class RiskHistoryView(APIView):
 
     def get(self, request):
         patient = _resolve_patient(request)
-        return ok({"history": prediction_series(patient), "disclaimer": DISCLAIMER})
+        return ok({"history": prediction_series(patient, request=request), "disclaimer": DISCLAIMER})
 
 
 class RiskTrendView(APIView):
@@ -98,7 +98,7 @@ class RiskTrendView(APIView):
 
     def get(self, request):
         patient = _resolve_patient(request)
-        history = prediction_series(patient)
+        history = prediction_series(patient, request=request)
         probabilities = [
             {"visit_date": h["visit_date"], "high_risk_probability": h.get("probability") if h["risk_level"] == "high risk" else None,
              "risk_level": h["risk_level"], "gestational_week": h.get("gestational_week")}

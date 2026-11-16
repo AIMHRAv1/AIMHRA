@@ -46,25 +46,31 @@ export default function Alerts() {
       {shown.length === 0 ? (
         <EmptyState title="No open alerts" hint="Rule-based alerts from patient assessments will appear here." />
       ) : (
-        <div className="card">
-          <table className="data-table">
-            <thead><tr><th>Patient</th><th>Category</th><th>Rules</th><th>Message</th><th>Created</th><th>Actions</th></tr></thead>
-            <tbody>
-              {shown.map((a) => (
-                <tr key={a.id} className={a.category === 'EMERGENCY' ? 'row-danger' : a.category === 'HIGH_CONCERN' ? 'row-warn' : ''}>
-                  <td><Link to={`/app/patients/${a.patient}`}>{a.patient_code}</Link></td>
-                  <td><CategoryBadge category={a.category} /></td>
-                  <td><code className="small">{a.rule_id}</code></td>
-                  <td className="cell-message">{a.message}</td>
-                  <td>{new Date(a.created_at).toLocaleString()}</td>
-                  <td className="cell-actions">
-                    <button className="btn btn-small" onClick={() => acknowledge(a.id, 'ACKNOWLEDGED')}>Ack</button>
-                    <button className="btn btn-small btn-secondary" onClick={() => acknowledge(a.id, 'RESOLVED')}>Resolve</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="card global-alert-list">
+          <div className="global-alert-head" aria-hidden="true">
+            <span>Patient</span><span>Category</span><span>Alert</span><span>Actions</span>
+          </div>
+          {shown.map((a) => (
+            <article
+              key={a.id}
+              className={`global-alert-row${a.category === 'EMERGENCY' ? ' is-emergency' : a.category === 'HIGH_CONCERN' ? ' is-high-concern' : ''}`}
+            >
+              <div className="global-alert-patient">
+                <Link to={`/app/patients/${a.patient}?tab=overview`}>{a.patient_code}</Link>
+                <time dateTime={a.created_at}>{new Date(a.created_at).toLocaleDateString()}</time>
+              </div>
+              <div><CategoryBadge category={a.category} /></div>
+              <p className="global-alert-message" title={`${a.rule_id}: ${a.message}`}>
+                <strong>{a.rule_description || a.rule_id}</strong>
+                <span>{a.message}</span>
+              </p>
+              <div className="global-alert-actions">
+                <Link className="btn btn-small btn-secondary" to={`/app/patients/${a.patient}?tab=alerts`}>View</Link>
+                <button className="btn btn-small" onClick={() => acknowledge(a.id, 'ACKNOWLEDGED')}>Ack</button>
+                <button className="btn btn-small btn-secondary" onClick={() => acknowledge(a.id, 'RESOLVED')}>Resolve</button>
+              </div>
+            </article>
+          ))}
         </div>
       )}
     </div>

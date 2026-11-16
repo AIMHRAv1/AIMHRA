@@ -51,10 +51,12 @@ def patient_summaries(patient_ids):
     from assessments.models import Alert, Assessment, Prediction
 
     assessments = Assessment.objects.filter(patient_id__in=patient_ids).values(
-        "patient_id", "visit_date", "id", "created_by__full_name", "created_by__username"
+        "patient_id", "visit_date", "id", "created_by__full_name", "created_by__username",
+        "created_by__photo",
     )
     last_assessment = {}
     last_assessed_by = {}
+    last_assessed_by_photo_path = {}
     counts = {}
     for row in assessments:
         pid = row["patient_id"]
@@ -62,7 +64,9 @@ def patient_summaries(patient_ids):
         key = (row["visit_date"], row["id"])
         if pid not in last_assessment or key > last_assessment[pid][0]:
             last_assessment[pid] = (key, row["visit_date"])
-            last_assessed_by[pid] = row["created_by__full_name"] or row["created_by__username"] or None
+            worker_name = row["created_by__full_name"] or row["created_by__username"] or None
+            last_assessed_by[pid] = worker_name
+            last_assessed_by_photo_path[pid] = row["created_by__photo"] if worker_name else None
 
     latest_pred = {}
     series = {}
@@ -99,6 +103,7 @@ def patient_summaries(patient_ids):
             "assessment_count": counts.get(pid, 0),
             "last_assessment_date": last_date.isoformat() if last_date else None,
             "last_assessed_by": last_assessed_by.get(pid),
+            "last_assessed_by_photo": last_assessed_by_photo_path.get(pid),
             "open_alert_count": open_alerts.get(pid, 0),
         }
     return summaries

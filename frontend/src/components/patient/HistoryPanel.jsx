@@ -5,6 +5,7 @@ import { MeasurementTrendChart, RiskTrendChart } from '../../charts'
 import { Disclaimer, EmptyState, ErrorState, Loading, RiskBadge } from '../ui'
 import { downloadReport } from '../../utils/reportDownload'
 import { toDisplayMeasurement } from '../../utils/glucoseUnits'
+import WorkerAvatar from '../WorkerAvatar'
 
 const MEASUREMENT_DETAILS = {
   age: { label: 'Age', unit: 'years' },
@@ -16,6 +17,7 @@ const MEASUREMENT_DETAILS = {
   hba1c: { label: 'HbA1c', unit: '%' },
   fasting_glucose: { label: 'Fasting glucose', unit: 'mg/dL' },
 }
+const HIDDEN_MEASUREMENT_FEATURES = new Set(['age', 'body_temperature', 'heart_rate'])
 
 export default function HistoryPanel({ patientId, showReportActions = true }) {
   const [data, setData] = useState(null)
@@ -53,6 +55,8 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
   const series = data.series ?? []
   const trend = data.trend
   const measurements = data.measurements
+  const visibleFeatures = (measurements?.features ?? [])
+    .filter((feature) => !HIDDEN_MEASUREMENT_FEATURES.has(feature))
   const displayVisits = (measurements?.visits ?? []).map((visit) => ({
     ...visit,
     hba1c: toDisplayMeasurement('hba1c', visit.hba1c),
@@ -75,7 +79,7 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
               {series.slice().reverse().map((assessment) => (
                 <tr key={assessment.id}>
                   <td>{assessment.visit_date}</td>
-                  <td>{assessment.recorded_by || '—'}</td>
+                  <td><span className="worker-cell"><WorkerAvatar src={assessment.recorded_by_photo_url} name={assessment.recorded_by} size={28} />{assessment.recorded_by || '—'}</span></td>
                   <td><RiskBadge level={assessment.risk_level} /></td>
                 </tr>
               ))}
@@ -103,11 +107,11 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
             <p className="muted small">Trends describe stored assessments only — the system does not predict future risk.</p>
           </div>
 
-          {measurements && measurements.visits?.length > 0 && (
+          {measurements && measurements.visits?.length > 0 && visibleFeatures.length > 0 && (
             <div className="card">
               <h2 className="section-title">Parameter trends over time</h2>
               <div className="measurement-charts">
-                {measurements.features.map((feature) => {
+                {visibleFeatures.map((feature) => {
                   const detail = MEASUREMENT_DETAILS[feature] || { label: feature, unit: '' }
                   return (
                     <section className="measurement-chart" key={feature}>
@@ -126,7 +130,7 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
             </div>
           )}
 
-          {measurements && measurements.visits?.length > 0 && (
+          {measurements && measurements.visits?.length > 0 && visibleFeatures.length > 0 && (
             <div className="card">
               <h2 className="section-title">Measurements across visits</h2>
               <div className="table-scroll">
@@ -141,7 +145,7 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {measurements.features.map((feature) => {
+                    {visibleFeatures.map((feature) => {
                       const cmp = comparisons.find((c) => c.feature === feature)
                       const detail = MEASUREMENT_DETAILS[feature] || { label: feature, unit: '' }
                       const previousValue = cmp ? toDisplayMeasurement(feature, cmp.previous_value) : null
@@ -186,13 +190,15 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
               )}
               {data.measurement_rules?.triggered?.length > 0 && (
                 <ul className="rule-list">
-                  {data.measurement_rules.triggered.map((t) => {
+                  {data.measurement_rules.triggered
+                    .filter((t) => !HIDDEN_MEASUREMENT_FEATURES.has(t.feature))
+                    .map((t) => {
                     const detail = MEASUREMENT_DETAILS[t.feature] || { unit: '' }
                     const delta = toDisplayMeasurement(t.feature, t.delta) - toDisplayMeasurement(t.feature, 0)
                     return (
                       <li key={t.id}><code>{t.id}</code> {t.description} — {t.feature} changed by {Number(delta.toFixed(1))} {detail.unit}</li>
                     )
-                  })}
+                    })}
                 </ul>
               )}
             </div>
@@ -215,7 +221,7 @@ export default function HistoryPanel({ patientId, showReportActions = true }) {
                     <td>{s.gestational_week ?? '—'}</td>
                     <td><RiskBadge level={s.risk_level} /></td>
                     <td>{Math.round(s.probability * 100)}%</td>
-                    <td className="muted small">{s.recorded_by || '—'}</td>
+                    <td className="muted small"><span className="worker-cell"><WorkerAvatar src={s.recorded_by_photo_url} name={s.recorded_by} size={28} />{s.recorded_by || '—'}</span></td>
                     <td className="muted small">{s.model}</td>
                     {showReportActions && (
                       <td>

@@ -4,10 +4,12 @@
     -> trend computation -> structured response
 """
 import logging
+from datetime import date
 
 from django.db import transaction
 from django.utils import timezone
 
+from accounts.utils import user_photo_url
 from assessments.models import Alert, Assessment, Prediction
 from assessments.references import attach_document_versions, guideline_references
 from assessments.rules import evaluate as rules_evaluate
@@ -42,16 +44,23 @@ def create_assessment(patient, data, request=None):
 
     visit_date = data.get("visit_date") or timezone.localdate()
     if isinstance(visit_date, str):
-        from datetime import date as date_type
+        visit_date = date.fromisoformat(visit_date)
 
-        visit_date = date_type.fromisoformat(visit_date)
+    gestational_week = data.get("gestational_week")
+    if gestational_week is None and patient.gestational_week_at_registration:
+        registered_date = timezone.localtime(patient.created_at).date()
+        elapsed_days = max(0, (visit_date - registered_date).days)
+        gestational_week = min(
+            45,
+            patient.gestational_week_at_registration + elapsed_days // 7,
+        )
 
     with transaction.atomic():
         assessment = Assessment.objects.create(
             patient=patient,
             created_by=getattr(request, "user", None),
             visit_date=visit_date,
-            gestational_week=data.get("gestational_week"),
+            gestational_week=gestational_week,
             symptoms=[s for s in (data.get("symptoms") or []) if s != "none"],
             notes=data.get("notes", ""),
             **feature_values,
@@ -93,7 +102,7 @@ def create_assessment(patient, data, request=None):
             detail={"category": rules_out["category"], "rules": [t["id"] for t in rules_out["triggered"]]},
         )
 
-    history = prediction_series(patient)
+    history = prediction_series(patient, request=request)
     trend = compute_trend(history)
 
     # Measurement-trend checks: deterministic arithmetic over stored visits,
@@ -144,7 +153,7 @@ def create_assessment(patient, data, request=None):
     return response
 
 
-def prediction_series(patient):
+def prediction_series(patient, request=None):
     """Serialized predictions for a patient, oldest first. Each entry names
     the health worker who recorded the visit (worker names are not patient
     PII — the administrator history view depends on them)."""
@@ -163,6 +172,11 @@ def prediction_series(patient):
             "gestational_week": p.assessment.gestational_week,
             "recorded_by": (
                 p.assessment.created_by.full_name or p.assessment.created_by.username
+                if p.assessment.created_by
+                else None
+            ),
+            "recorded_by_photo_url": (
+                user_photo_url(p.assessment.created_by.photo, request)
                 if p.assessment.created_by
                 else None
             ),

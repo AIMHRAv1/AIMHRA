@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { adminService } from '../../services/auth'
 import { apiError } from '../../api/client'
 import { ErrorState, Loading } from '../../components/ui'
+import WorkerAvatar from '../../components/WorkerAvatar'
 
 const EMPTY_FORM = {
   username: '',
@@ -11,6 +12,7 @@ const EMPTY_FORM = {
   full_name: '',
   phone: '',
   password: '',
+  photo: null,
 }
 
 export default function AdminUsers() {
@@ -39,7 +41,17 @@ export default function AdminUsers() {
     event.preventDefault()
     setNotice(null)
     try {
-      await adminService.createUser({ ...form, role: createRole })
+      const payload = { ...form, role: createRole }
+      if (form.photo) {
+        const multipart = new FormData()
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value !== null && value !== '') multipart.append(key, value)
+        })
+        await adminService.createUser(multipart)
+      } else {
+        delete payload.photo
+        await adminService.createUser(payload)
+      }
       setNotice(`Created ${form.username}.`)
       setCreateRole(null)
       setForm(EMPTY_FORM)
@@ -136,7 +148,7 @@ export default function AdminUsers() {
             <tbody>
               {healthcareWorkers.map((account) => (
                 <tr key={account.id} className={!account.is_active ? 'row-muted' : ''}>
-                  <td><Link to={`/app/admin/users/${account.id}`}>{account.username}</Link></td>
+                  <td><span className="worker-cell"><WorkerAvatar src={account.photo_url} name={account.full_name || account.username} size={30} /><Link to={`/app/admin/users/${account.id}`}>{account.username}</Link></span></td>
                   <td>{account.full_name || '—'}</td>
                   <td>{account.email || '—'}</td>
                   <td>{account.patients_handled ?? 0}</td>
@@ -167,6 +179,13 @@ export default function AdminUsers() {
             <label className="field"><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
             <label className="field"><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
             <label className="field"><span>Password</span><input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required autoComplete="new-password" /></label>
+            {createRole === 'HEALTHCARE_WORKER' && (
+              <label className="field">
+                <span>Profile photo (optional)</span>
+                <input type="file" accept="image/*" onChange={(event) => setForm({ ...form, photo: event.target.files?.[0] ?? null })} />
+                <small className="field-hint">Choose an image up to 5 MB.</small>
+              </label>
+            )}
           </div>
           <div className="form-actions"><button className="btn btn-primary">Create account</button></div>
         </form>

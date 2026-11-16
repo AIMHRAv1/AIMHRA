@@ -5,18 +5,18 @@ import { ShapBars } from '../../charts'
 import { CategoryBadge, Disclaimer, EmptyState, ErrorState, Loading, RiskBadge } from '../ui'
 import { IconAlertTriangle, IconOctagonAlert } from '../icons'
 import { AdvisoryCard } from './AdvisoryPanel'
-import { ageAtDateOfBirth } from '../../utils/patientDates'
+import { ageAtDateOfBirth, currentGestationalWeek } from '../../utils/patientDates'
 import { glucoseToMmolL, hbA1cToMmolMol, hbA1cToPercent } from '../../utils/glucoseUnits'
 
 const FIELDS = [
-  { name: 'age', label: 'Age (years)', min: 14, max: 55, step: 1, hint: 'Plausible range 14–55' },
-  { name: 'body_temperature', label: 'Body temperature (°F)', min: 95, max: 106, step: 0.1, hint: 'Normal ≈ 97–99.5' },
-  { name: 'heart_rate', label: 'Heart rate (bpm)', min: 40, max: 200, step: 1 },
-  { name: 'systolic_bp', label: 'Systolic blood pressure (mm Hg)', min: 70, max: 250, step: 1 },
-  { name: 'diastolic_bp', label: 'Diastolic blood pressure (mm Hg)', min: 40, max: 150, step: 1 },
-  { name: 'bmi', label: 'BMI (kg/m²)', min: 12, max: 60, step: 0.1 },
-  { name: 'hba1c', label: 'HbA1c (%)', min: 3.98, max: 7.64, step: 0.01, hint: 'Typical reference: 4.0–5.6%; model data coverage: about 4.9–6.7%.' },
-  { name: 'fasting_glucose', label: 'Fasting glucose (mg/dL)', min: 36, max: 360.4, step: 0.1, hint: 'Typical fasting reference: 70–99 mg/dL; model data coverage: about 63–160 mg/dL.' },
+  { name: 'age', label: 'Age (years)', min: 14, max: 55, step: 1, hint: 'Average range: 18–35 years.' },
+  { name: 'body_temperature', label: 'Body temperature (°F)', min: 95, max: 106, step: 0.1, hint: 'Average range: 97–99.5 °F.' },
+  { name: 'heart_rate', label: 'Heart rate (bpm)', min: 40, max: 200, step: 1, hint: 'Average range: 60–100 bpm.' },
+  { name: 'systolic_bp', label: 'Systolic blood pressure (mm Hg)', min: 70, max: 250, step: 1, hint: 'Average range: 90–139 mm Hg.' },
+  { name: 'diastolic_bp', label: 'Diastolic blood pressure (mm Hg)', min: 40, max: 150, step: 1, hint: 'Average range: 60–89 mm Hg.' },
+  { name: 'bmi', label: 'BMI (kg/m²)', min: 12, max: 60, step: 0.1, hint: 'Average range: 18.5–24.9 kg/m².' },
+  { name: 'hba1c', label: 'HbA1c (%)', min: 3.98, max: 7.64, step: 0.01, hint: 'Average range: 4.0–5.6%.' },
+  { name: 'fasting_glucose', label: 'Fasting glucose (mg/dL)', min: 36, max: 360.4, step: 0.1, hint: 'Average range: 70–99 mg/dL.' },
 ]
 
 const SYMPTOMS = [
@@ -72,6 +72,11 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
   )
   const calculatedAge = ageAtDateOfBirth(patient?.date_of_birth, form.visit_date)
   const ageIsCalculated = Boolean(patient?.date_of_birth)
+  const calculatedGestationalWeek = currentGestationalWeek(
+    patient?.gestational_week_at_registration,
+    patient?.created_at,
+    form.visit_date,
+  )
 
   function set(k, v) { setForm((f) => ({ ...f, [k]: v })) }
 
@@ -194,7 +199,9 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
         ...form,
         age: ageIsCalculated ? calculatedAge : Number(form.age),
         patient: patient.id,
-        gestational_week: form.gestational_week === '' ? null : Number(form.gestational_week),
+        gestational_week: form.gestational_week === ''
+          ? calculatedGestationalWeek
+          : Number(form.gestational_week),
         data_source: mode === 'scan' && scan.result ? 'ocr_assisted' : 'manual',
       }
       for (const f of FIELDS) payload[f.name] = Number(payload[f.name])
@@ -275,9 +282,15 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
                   {scanCropRow('visit_date', scan.result, checkedFields, setCheckedFields)}
                 </label>
                 <label className="field">
-                  <span>Gestational week (optional) {scanBadge(scan.result, 'gestational_week')}</span>
-                  <input type="number" min={1} max={45} value={form.gestational_week}
+                  <span>Gestational week {scanBadge(scan.result, 'gestational_week')}</span>
+                  <input type="number" min={1} max={45}
+                         value={form.gestational_week || calculatedGestationalWeek || ''}
                          onChange={(e) => set('gestational_week', e.target.value)} placeholder="e.g. 24" />
+                  <small className="field-hint">
+                    {calculatedGestationalWeek != null
+                      ? `Estimated from patient registration and visit date: week ${calculatedGestationalWeek}.`
+                      : 'Optional; enter the current pregnancy week if known.'}
+                  </small>
                   {scanWarn(scan.result, 'gestational_week', applySuggestion)}
                   {errors.gestational_week && <em className="field-error">{errors.gestational_week}</em>}
                   {scanCropRow('gestational_week', scan.result, checkedFields, setCheckedFields)}
@@ -329,6 +342,7 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
               <label className="field">
                 <span>Notes (optional)</span>
                 <textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+                <small className="field-hint">Included with symptoms and measurements when generating the care advisory.</small>
               </label>
 
               <div className="form-actions">

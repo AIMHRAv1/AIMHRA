@@ -18,6 +18,7 @@ import {
   IconOctagonAlert, IconPlusCircle, IconTrendingUp, IconUser,
 } from '../../components/icons'
 import { downloadReport } from '../../utils/reportDownload'
+import WorkerAvatar from '../../components/WorkerAvatar'
 
 const TABS = [
   { key: 'overview', label: 'Overview', Icon: IconLayoutDashboard },
@@ -124,9 +125,12 @@ export default function PatientDetail() {
   return (
     <div className="page">
       <header className="page-head">
-        <div>
-          <div className="muted small"><Link to="/app/patients">← All patients</Link></div>
-          <h1>{patient.patient_code}</h1>
+        <div className="patient-detail-identity">
+          <div className="patient-identification-card">
+            <Link className="btn btn-secondary" to="/app/patients">← All patients</Link>
+            {!isAdmin && <WorkerAvatar src={patient.photo_url} name={patient.full_name || 'Patient'} size={64} />}
+            <h1>{patient.patient_code}</h1>
+          </div>
           {!isAdmin && (
             <p className="muted">
               {patient.full_name || 'Unnamed patient'}

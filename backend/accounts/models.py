@@ -33,6 +33,7 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=32, choices=ROLE_CHOICES, default=ROLE_HEALTHCARE_WORKER)
     phone = models.CharField(max_length=32, blank=True, default="")
+    photo = models.ImageField(upload_to="users/profile_photos/", blank=True, null=True)
     # Required on registration so admins can review who signed up.
     full_name = models.CharField(max_length=128, blank=True, default="")
 

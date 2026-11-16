@@ -1,7 +1,7 @@
 /** Recharts-based visualizations shared across dashboards. */
 import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart,
-  Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Pie, PieChart, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 
 export const RISK_COLORS = { 'low risk': '#2e7d5b', 'mid risk': '#d99518', 'high risk': '#c0392b' }
@@ -20,12 +20,18 @@ export function RiskTrendChart({ series }) {
       <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -20 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e3e8ec" />
         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-        <YAxis domain={[-0.2, 2.2]} ticks={[0, 1, 2]} tickFormatter={(v) => ({ 0: 'Low', 1: 'Mid', 2: 'High' }[v] ?? '')} tick={{ fontSize: 12 }} />
+        <YAxis domain={[-0.5, 2.5]} ticks={[0, 1, 2]} tickFormatter={(v) => ({ 0: 'Low', 1: 'Mid', 2: 'High' }[v] ?? '')} tick={{ fontSize: 12 }} />
+        <ReferenceArea y1={-0.5} y2={0.5} fill={RISK_COLORS['low risk']} fillOpacity={0.08} />
+        <ReferenceArea y1={0.5} y2={1.5} fill={RISK_COLORS['mid risk']} fillOpacity={0.08} />
+        <ReferenceArea y1={1.5} y2={2.5} fill={RISK_COLORS['high risk']} fillOpacity={0.08} />
+        <ReferenceLine y={0} stroke={RISK_COLORS['low risk']} strokeDasharray="4 4" strokeOpacity={0.45} />
+        <ReferenceLine y={1} stroke={RISK_COLORS['mid risk']} strokeDasharray="4 4" strokeOpacity={0.45} />
+        <ReferenceLine y={2} stroke={RISK_COLORS['high risk']} strokeDasharray="4 4" strokeOpacity={0.45} />
         <Tooltip
           formatter={(value, _name, entry) => [entry?.payload?.label, 'Risk category']}
           labelFormatter={(_l, entries) => entries?.[0]?.payload?.date ?? _l}
         />
-        <Line type="stepAfter" dataKey="level" stroke="#1f6f8b" strokeWidth={2.5} dot={{ r: 4 }} isAnimationActive={false} />
+        <Line type="monotone" dataKey="level" stroke="#1f6f8b" strokeWidth={2.5} dot={{ r: 5, fill: '#1f6f8b', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7 }} isAnimationActive={false} />
       </LineChart>
     </ResponsiveContainer>
   )

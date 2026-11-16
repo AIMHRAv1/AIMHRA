@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import WorkerAvatar from './WorkerAvatar'
 import {
   IconBell, IconBookOpen, IconClipboardList, IconCpu, IconFileText,
   IconLayoutDashboard, IconLayoutGrid, IconUser, IconUserCog, IconUsers,
@@ -56,8 +57,13 @@ export default function Layout() {
         </nav>
         <div className="sidebar-footer">
           <div className="user-chip">
-            <div className="user-name">{user?.full_name || user?.username}</div>
-            <div className="user-role">{ROLE_LABELS[user?.role] || user?.role}</div>
+            {user?.role === 'HEALTHCARE_WORKER' && (
+              <WorkerAvatar src={user.photo_url} name={user.full_name || user.username} size={40} />
+            )}
+            <div>
+              <div className="user-name">{user?.full_name || user?.username}</div>
+              <div className="user-role">{ROLE_LABELS[user?.role] || user?.role}</div>
+            </div>
           </div>
           <button className="btn btn-ghost btn-block" onClick={handleLogout}>Sign out</button>
         </div>

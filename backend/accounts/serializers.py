@@ -5,16 +5,27 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from accounts.models import User
+from accounts.utils import user_photo_url
 
 
 class UserSerializer(serializers.ModelSerializer):
+    photo_url = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
-            "id", "username", "email", "full_name", "phone", "role",
+            "id", "username", "email", "full_name", "phone", "photo", "photo_url", "role",
             "date_joined", "is_active", "is_superuser",
         ]
         read_only_fields = ["id", "role", "date_joined", "is_active", "is_superuser"]
+
+    def get_photo_url(self, obj):
+        return user_photo_url(obj.photo, self.context.get("request"))
+
+    def validate_photo(self, value):
+        if value and value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Photo must be 5 MB or smaller.")
+        return value
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -104,14 +115,26 @@ class UserAdminSerializer(serializers.ModelSerializer):
     """Admin-facing user serializer (role editing allowed)."""
 
     patients_handled = serializers.IntegerField(read_only=True, default=0)
+    photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
-            "id", "username", "email", "full_name", "phone", "role",
+            "id", "username", "email", "full_name", "phone", "photo", "photo_url", "role",
             "is_active", "date_joined", "is_superuser", "patients_handled",
         ]
         read_only_fields = ["id", "date_joined", "is_superuser", "patients_handled"]
+
+    def get_photo_url(self, obj):
+        return user_photo_url(obj.photo, self.context.get("request"))
+
+    def validate_photo(self, value):
+        role = self.initial_data.get("role", getattr(self.instance, "role", None))
+        if value and role != User.ROLE_HEALTHCARE_WORKER:
+            raise serializers.ValidationError("Only healthcare worker accounts can have a profile photo.")
+        if value and value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Photo must be 5 MB or smaller.")
+        return value
 
     def validate_role(self, value):
         request = self.context.get("request")

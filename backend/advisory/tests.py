@@ -1,5 +1,7 @@
 """Advisory pipeline tests: chatbot-pipeline advice per assessment, warn-then-
 advise on emergency assessments, safe offline fallback and access control."""
+from unittest.mock import patch
+
 from accounts.models import User
 from assessments.models import Assessment
 from django.test import TestCase, override_settings
@@ -142,6 +144,62 @@ class AdvisoryPipelineTests(TestCase):
         self.assertLess(content.find("do not wait"), content.find("the care steps below"))
         # ...but the advice on what to do is still present.
         self.assertTrue(len(content) > 300)
+
+    def test_high_model_risk_is_not_labeled_normal_without_symptoms(self):
+        _data, assessment = self._create_assessment(self.profile, VITALS)
+        prediction = assessment.prediction
+        prediction.risk_level = "high risk"
+        prediction.probability = 0.87
+        prediction.save(update_fields=["risk_level", "probability"])
+
+        with (
+            patch("advisory.services.rag.retrieve_context", return_value={"chunks": []}),
+            patch("advisory.services.generate_answer", return_value=("Care guidance.", "local_llm")) as generate,
+        ):
+            response = self._generate(assessment.id)
+
+        self.assertEqual(response.status_code, 201, response.content)
+        advisory = response.json()["data"]["advisory"]
+        self.assertEqual(advisory["risk_level"], "high risk")
+        self.assertEqual(advisory["rules_category"], "HIGH_CONCERN")
+        self.assertIn("classified this assessment as **high risk**", advisory["content"])
+        self.assertIn("model classified this assessment as high risk", generate.call_args.args[0])
+
+    def test_advisory_generator_receives_assessment_notes_symptoms_and_measurements(self):
+        _data, assessment = self._create_assessment(
+            self.profile, VITALS, symptoms=["persistent_vomiting"]
+        )
+        assessment.notes = "Reports difficulty keeping fluids down."
+        assessment.save(update_fields=["notes"])
+        assessment.patient.gestational_week_at_registration = 18
+        assessment.patient.blood_group = "O+"
+        assessment.patient.medical_history_notes = "History of gestational diabetes."
+        assessment.patient.allergies = "Penicillin."
+        assessment.patient.current_medications = "Folic acid."
+        assessment.patient.additional_notes = "Needs interpreter support."
+        assessment.patient.save(update_fields=[
+            "gestational_week_at_registration", "blood_group", "medical_history_notes",
+            "allergies", "current_medications", "additional_notes",
+        ])
+
+        with (
+            patch("advisory.services.rag.retrieve_context", return_value={"chunks": []}),
+            patch("advisory.services.generate_answer", return_value=("Care guidance.", "local_llm")) as generate,
+        ):
+            response = self._generate(assessment.id)
+
+        self.assertEqual(response.status_code, 201, response.content)
+        context = generate.call_args.kwargs["patient_context"]
+        self.assertIn("Reports difficulty keeping fluids down.", context)
+        self.assertIn("symptoms recorded: persistent vomiting", context)
+        self.assertIn("systolic blood pressure 118.0 mm Hg", context)
+        self.assertIn("blood group (entered clinical data", context)
+        self.assertIn("History of gestational diabetes.", context)
+        self.assertIn("Penicillin.", context)
+        self.assertIn("Needs interpreter support.", context)
+        retrieval_query = generate.call_args.args[0]
+        self.assertIn("medical history: History of gestational diabetes", retrieval_query)
+        self.assertIn("gestational week 18", retrieval_query)
 
     def test_non_worker_cannot_generate_or_read(self):
         # Policy: workers see all patients; only non-worker roles are denied.

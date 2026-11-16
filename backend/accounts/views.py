@@ -205,7 +205,7 @@ class HealthcareWorkerActivityView(APIView):
             prediction = getattr(assessment, "prediction", None)
             entry["latest_risk"] = prediction.risk_level if prediction else None
 
-        user_data = UserAdminSerializer(worker).data
+        user_data = UserAdminSerializer(worker, context={"request": request}).data
         user_data["patients_handled"] = len(patient_activity)
         return Response(
             {

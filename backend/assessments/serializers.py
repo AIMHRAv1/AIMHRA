@@ -14,11 +14,12 @@ class AssessmentSerializer(serializers.ModelSerializer):
     """
 
     prediction = serializers.SerializerMethodField()
+    patient_code = serializers.CharField(source="patient.patient_code", read_only=True)
 
     class Meta:
         model = Assessment
         fields = [
-            "id", "patient", "visit_date", "gestational_week", "age", "body_temperature",
+            "id", "patient", "patient_code", "visit_date", "gestational_week", "age", "body_temperature",
             "heart_rate", "systolic_bp", "diastolic_bp", "bmi", "hba1c", "fasting_glucose",
             "symptoms", "notes", "created_at", "prediction",
         ]

@@ -225,6 +225,39 @@ class AuthFlowTests(TestCase):
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()["role"], "HEALTHCARE_WORKER")
 
+    def test_admin_can_create_healthcare_worker_with_photo(self):
+        from io import BytesIO
+        from tempfile import TemporaryDirectory
+
+        from PIL import Image
+        from django.test import override_settings
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from rest_framework.test import APIClient
+
+        admin = make_user("photoAdmin", role="ADMIN")
+        token = RefreshToken.for_user(admin).access_token
+        image_buffer = BytesIO()
+        Image.new("RGB", (2, 2), "blue").save(image_buffer, format="PNG")
+
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            client = APIClient()
+            client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+            response = client.post(
+                "/api/auth/users/",
+                {
+                    "username": "workerwithphoto",
+                    "email": "workerphoto@test.com",
+                    "password": "Str0ng!Pass1",
+                    "role": "HEALTHCARE_WORKER",
+                    "photo": SimpleUploadedFile(
+                        "worker.png", image_buffer.getvalue(), content_type="image/png",
+                    ),
+                },
+            )
+            self.assertEqual(response.status_code, 201, response.content)
+            self.assertIn("/media/users/profile_photos/", response.json()["photo_url"])
+            self.assertTrue(User.objects.get(username="workerwithphoto").photo.name)
+
     def test_healthcare_worker_activity_groups_assessments_by_patient(self):
         from assessments.models import Assessment, Prediction
         from patients.models import PatientProfile

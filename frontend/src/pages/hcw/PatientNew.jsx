@@ -3,11 +3,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import { patientService } from '../../services/auth'
 import { apiError } from '../../api/client'
 import { bloodGroupOptions } from '../../constants/clinical'
+import WorkerAvatar from '../../components/WorkerAvatar'
 
 const initial = {
   full_name: '', email: '', phone: '', address: '',
+  photo: null,
   date_of_birth: '', blood_group: '', gestational_week_at_registration: '',
-  estimated_due_date: '', gravidity: '', parity: '',
+  estimated_due_date: '',
   medical_history_notes: '', allergies: '',
   emergency_contact_name: '', emergency_contact_phone: '',
   obstetric_history_notes: '', current_medications: '', additional_notes: '',
@@ -30,17 +32,25 @@ export default function PatientNew() {
     setError(null)
     setBusy(true)
     try {
-      const payload = { ...form }
+      const { photo, ...payload } = form
       if (!payload.full_name.trim()) {
         setErrors((e) => ({ ...e, full_name: 'Patient name is required.' }))
         setBusy(false)
         return
       }
       for (const k of ['date_of_birth', 'estimated_due_date']) if (!payload[k]) payload[k] = null
-      for (const k of ['gestational_week_at_registration', 'gravidity', 'parity']) {
+      for (const k of ['gestational_week_at_registration']) {
         payload[k] = payload[k] === '' || payload[k] == null ? null : Number(payload[k])
       }
-      const created = await patientService.create(payload)
+      let data = payload
+      if (photo) {
+        const multipart = new FormData()
+        Object.entries({ ...payload, photo }).forEach(([key, value]) => {
+          if (value !== null && value !== undefined) multipart.append(key, value)
+        })
+        data = multipart
+      }
+      const created = await patientService.create(data)
       navigate(`/app/patients/${created.id}?tab=overview`, { replace: true })
     } catch (err) {
       const e2 = apiError(err)
@@ -66,12 +76,20 @@ export default function PatientNew() {
       {error && <div className="alert alert-error" role="alert">{error.message}</div>}
 
       <form className="card" onSubmit={onSubmit} noValidate>
-        <h2 className="section-title">Patient information</h2>
+        <div className="patient-form-heading">
+          <WorkerAvatar name={form.full_name || 'Patient'} size={64} />
+          <h2 className="section-title">Patient information</h2>
+        </div>
         <div className="grid-2">
           <label className="field">
             <span>Full name</span>
             <input value={form.full_name} onChange={(e) => set('full_name', e.target.value)} required />
             {errors.full_name && <em className="field-error">{errors.full_name}</em>}
+          </label>
+          <label className="field">
+            <span>Patient photo (optional)</span>
+            <input type="file" accept="image/*" onChange={(e) => set('photo', e.target.files?.[0] ?? null)} />
+            <small className="field-hint">Choose an image up to 5 MB.</small>
           </label>
           <label className="field">
             <span>Email</span>
@@ -106,14 +124,6 @@ export default function PatientNew() {
           <label className="field">
             <span>Estimated due date</span>
             <input type="date" value={form.estimated_due_date} onChange={(e) => set('estimated_due_date', e.target.value)} />
-          </label>
-          <label className="field">
-            <span>Gravidity (total pregnancies)</span>
-            <input type="number" min={0} value={form.gravidity} onChange={(e) => set('gravidity', e.target.value)} />
-          </label>
-          <label className="field">
-            <span>Parity (births)</span>
-            <input type="number" min={0} value={form.parity} onChange={(e) => set('parity', e.target.value)} />
           </label>
           <label className="field">
             <span>Emergency contact name</span>

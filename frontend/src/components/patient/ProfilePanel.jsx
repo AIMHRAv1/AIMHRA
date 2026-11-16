@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { patientService } from '../../services/auth'
 import { apiError } from '../../api/client'
 import { bloodGroupOptions } from '../../constants/clinical'
+import WorkerAvatar from '../WorkerAvatar'
 
 const EMPTY = {
   full_name: '', email: '', phone: '', address: '',
   date_of_birth: '', blood_group: '', gestational_week_at_registration: '',
-  estimated_due_date: '', gravidity: '', parity: '',
+  estimated_due_date: '',
   medical_history_notes: '', allergies: '',
   emergency_contact_name: '', emergency_contact_phone: '',
   obstetric_history_notes: '', current_medications: '', additional_notes: '',
@@ -32,12 +33,20 @@ export default function ProfilePanel({ patient, onSaved }) {
     setNotice(null)
     setError(null)
     try {
-      const payload = { ...form }
+      const { photo, ...payload } = form
       for (const k of ['date_of_birth', 'estimated_due_date']) if (!payload[k]) payload[k] = null
-      for (const k of ['gestational_week_at_registration', 'gravidity', 'parity']) {
+      for (const k of ['gestational_week_at_registration']) {
         payload[k] = payload[k] === '' || payload[k] == null ? null : Number(payload[k])
       }
-      const d = await patientService.update(patient.id, payload)
+      let data = payload
+      if (typeof File !== 'undefined' && photo instanceof File) {
+        const multipart = new FormData()
+        Object.entries({ ...payload, photo }).forEach(([key, value]) => {
+          if (value !== null && value !== undefined) multipart.append(key, value)
+        })
+        data = multipart
+      }
+      const d = await patientService.update(patient.id, data)
       setForm({ ...EMPTY, ...d })
       setNotice('Patient information saved.')
       setEditing(false)
@@ -61,7 +70,10 @@ export default function ProfilePanel({ patient, onSaved }) {
     return (
       <div className="card">
         <div className="page-head">
-          <h2 className="section-title">Patient profile — {patient.patient_code}</h2>
+          <div className="patient-profile-heading">
+            <WorkerAvatar src={patient.photo_url} name={patient.full_name || 'Patient'} size={64} />
+            <h2 className="section-title">Patient profile — {patient.patient_code}</h2>
+          </div>
           <button type="button" className="btn btn-primary" onClick={() => setEditing(true)}>Edit information</button>
         </div>
         {notice && <div className="alert alert-success">{notice}</div>}
@@ -75,8 +87,6 @@ export default function ProfilePanel({ patient, onSaved }) {
           <div><dt>Address</dt><dd>{display(patient.address)}</dd></div>
           <div><dt>Gestational week at registration</dt><dd>{display(patient.gestational_week_at_registration)}</dd></div>
           <div><dt>Estimated due date</dt><dd>{display(patient.estimated_due_date)}</dd></div>
-          <div><dt>Gravidity</dt><dd>{display(patient.gravidity)}</dd></div>
-          <div><dt>Parity</dt><dd>{display(patient.parity)}</dd></div>
           <div><dt>Emergency contact</dt><dd>{display(patient.emergency_contact_name)}</dd></div>
           <div><dt>Emergency contact phone</dt><dd>{display(patient.emergency_contact_phone)}</dd></div>
         </dl>
@@ -114,6 +124,14 @@ export default function ProfilePanel({ patient, onSaved }) {
       {notice && <div className="alert alert-success">{notice}</div>}
       {error && <div className="alert alert-error" role="alert">{error.message}</div>}
       <div className="grid-2">
+        <label className="field">
+          <span>Patient photo</span>
+          <span className="worker-cell">
+            <WorkerAvatar src={patient.photo_url} name={patient.full_name || 'Patient'} size={48} />
+            <input type="file" accept="image/*" onChange={(e) => set('photo', e.target.files?.[0] ?? null)} />
+          </span>
+          <small className="field-hint">Choose an image up to 5 MB.</small>
+        </label>
         <label className="field"><span>Full name</span>
           <input value={form.full_name} onChange={(e) => set('full_name', e.target.value)} required />
           {errors.full_name && <em className="field-error">{errors.full_name}</em>}</label>
@@ -134,10 +152,6 @@ export default function ProfilePanel({ patient, onSaved }) {
           <input type="number" min={1} max={45} value={form.gestational_week_at_registration ?? ''} onChange={(e) => set('gestational_week_at_registration', e.target.value)} /></label>
         <label className="field"><span>Estimated due date</span>
           <input type="date" value={form.estimated_due_date ?? ''} onChange={(e) => set('estimated_due_date', e.target.value)} /></label>
-        <label className="field"><span>Gravidity (total pregnancies)</span>
-          <input type="number" min={0} value={form.gravidity ?? ''} onChange={(e) => set('gravidity', e.target.value)} /></label>
-        <label className="field"><span>Parity (births)</span>
-          <input type="number" min={0} value={form.parity ?? ''} onChange={(e) => set('parity', e.target.value)} /></label>
         <label className="field"><span>Address</span>
           <input value={form.address} onChange={(e) => set('address', e.target.value)} /></label>
         <label className="field"><span>Emergency contact name</span>

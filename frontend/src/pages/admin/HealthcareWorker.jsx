@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { adminService } from '../../services/auth'
 import { apiError } from '../../api/client'
 import { EmptyState, ErrorState, Loading, RiskBadge } from '../../components/ui'
+import WorkerAvatar from '../../components/WorkerAvatar'
 
 export default function AdminHealthcareWorker() {
   const { id } = useParams()
@@ -44,6 +45,13 @@ export default function AdminHealthcareWorker() {
 
       <section className="card">
         <h2 className="section-title">Healthcare worker information</h2>
+        <div className="worker-profile">
+          <WorkerAvatar src={worker.photo_url} name={worker.full_name || worker.username} size={80} />
+          <div>
+            <strong>{worker.full_name || worker.username}</strong>
+            <div className="muted">{worker.username}</div>
+          </div>
+        </div>
         <dl className="kv kv-lg">
           <div><dt>Username</dt><dd>{worker.username}</dd></div>
           <div><dt>Full name</dt><dd>{worker.full_name || '—'}</dd></div>

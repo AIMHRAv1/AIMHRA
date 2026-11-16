@@ -72,7 +72,7 @@ class PatientListView(generics.ListCreateAPIView):
             request, "PATIENT_CREATED", target_type="patient", target_id=str(patient.id),
             detail={"patient_code": patient.patient_code},
         )
-        return ok(PatientProfileSerializer(patient).data, status=201)
+        return ok(self.get_serializer(patient, context=self.get_serializer_context()).data, status=201)
 
 
 class PatientDetailView(generics.RetrieveUpdateAPIView):

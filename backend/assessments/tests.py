@@ -1,9 +1,11 @@
 """Assessment workflow tests: validation, permissions, isolation, rule engine,
 trends. Patients are standalone records owned/assigned to healthcare workers."""
 import json
+from datetime import datetime
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import User
@@ -248,6 +250,21 @@ class AssessmentAPITests(AuthMixin, TestCase):
         self.assertTrue(Assessment.objects.filter(patient=self.profile).exists())
         self.assertTrue(Prediction.objects.filter(assessment__patient=self.profile).exists())
 
+    def test_registration_gestational_week_advances_for_assessment_date(self):
+        self.auth(self.worker)
+        self.profile.gestational_week_at_registration = 18
+        self.profile.created_at = timezone.make_aware(datetime(2026, 8, 5, 12))
+        self.profile.save(update_fields=["gestational_week_at_registration", "created_at"])
+
+        response = self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.profile.id, "visit_date": "2026-08-19"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["data"]["assessment"]["gestational_week"], 20)
+
     def test_emergency_assessment_creates_alert(self):
         self.auth(self.worker)
         payload = {**VALID_PAYLOAD, "patient": self.profile.id, "systolic_bp": 172, "symptoms": ["severe_headache"]}
@@ -385,9 +402,15 @@ class AssessmentAPITests(AuthMixin, TestCase):
 
     def test_assessment_list_requires_patient_or_scopes_access(self):
         self.auth(self.worker)
+        self.client.post(
+            "/api/assessments/",
+            {**VALID_PAYLOAD, "patient": self.profile.id},
+            content_type="application/json",
+        )
         r = self.client.get("/api/assessments/")
         self.assertEqual(r.status_code, 200)
-        self.assertIsNotNone(r.json()["data"])
+        data = r.json()["data"] or r.json()
+        self.assertEqual(data["results"][0]["patient_code"], self.profile.patient_code)
 
     def test_no_model_means_503_not_fabricated(self):
         from mlcore.models import ModelVersion
