@@ -7,7 +7,6 @@ import WorkerAvatar from '../WorkerAvatar'
 const EMPTY = {
   full_name: '', email: '', phone: '', address: '',
   date_of_birth: '', blood_group: '', gestational_week_at_registration: '',
-  estimated_due_date: '',
   medical_history_notes: '', allergies: '',
   emergency_contact_name: '', emergency_contact_phone: '',
   obstetric_history_notes: '', current_medications: '', additional_notes: '',
@@ -34,7 +33,8 @@ export default function ProfilePanel({ patient, onSaved }) {
     setError(null)
     try {
       const { photo, ...payload } = form
-      for (const k of ['date_of_birth', 'estimated_due_date']) if (!payload[k]) payload[k] = null
+      delete payload.estimated_due_date
+      if (!payload.date_of_birth) payload.date_of_birth = null
       for (const k of ['gestational_week_at_registration']) {
         payload[k] = payload[k] === '' || payload[k] == null ? null : Number(payload[k])
       }
@@ -86,7 +86,6 @@ export default function ProfilePanel({ patient, onSaved }) {
           <div><dt>Blood group</dt><dd>{display(patient.blood_group)}</dd></div>
           <div><dt>Address</dt><dd>{display(patient.address)}</dd></div>
           <div><dt>Gestational week at registration</dt><dd>{display(patient.gestational_week_at_registration)}</dd></div>
-          <div><dt>Estimated due date</dt><dd>{display(patient.estimated_due_date)}</dd></div>
           <div><dt>Emergency contact</dt><dd>{display(patient.emergency_contact_name)}</dd></div>
           <div><dt>Emergency contact phone</dt><dd>{display(patient.emergency_contact_phone)}</dd></div>
         </dl>
@@ -103,7 +102,7 @@ export default function ProfilePanel({ patient, onSaved }) {
   }
 
   return (
-    <form className="card" onSubmit={onSubmit}>
+    <form className="card" onSubmit={onSubmit} autoComplete="off">
       <div className="page-head">
         <h2 className="section-title">Edit patient profile — {patient.patient_code}</h2>
         <button
@@ -133,12 +132,12 @@ export default function ProfilePanel({ patient, onSaved }) {
           <small className="field-hint">Choose an image up to 5 MB.</small>
         </label>
         <label className="field"><span>Full name</span>
-          <input value={form.full_name} onChange={(e) => set('full_name', e.target.value)} required />
+          <input name="patient_full_name" autoComplete="off" value={form.full_name} onChange={(e) => set('full_name', e.target.value)} required />
           {errors.full_name && <em className="field-error">{errors.full_name}</em>}</label>
         <label className="field"><span>Email</span>
-          <input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></label>
+          <input name="patient_email" autoComplete="off" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></label>
         <label className="field"><span>Phone</span>
-          <input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+977 …" /></label>
+          <input name="patient_phone" autoComplete="off" type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+977 …" /></label>
         <label className="field"><span>Date of birth</span>
           <input type="date" value={form.date_of_birth ?? ''} onChange={(e) => set('date_of_birth', e.target.value)} /></label>
         <label className="field"><span>Blood group</span>
@@ -150,14 +149,12 @@ export default function ProfilePanel({ patient, onSaved }) {
           {errors.blood_group && <em className="field-error">{errors.blood_group}</em>}</label>
         <label className="field"><span>Gestational week at registration</span>
           <input type="number" min={1} max={45} value={form.gestational_week_at_registration ?? ''} onChange={(e) => set('gestational_week_at_registration', e.target.value)} /></label>
-        <label className="field"><span>Estimated due date</span>
-          <input type="date" value={form.estimated_due_date ?? ''} onChange={(e) => set('estimated_due_date', e.target.value)} /></label>
         <label className="field"><span>Address</span>
           <input value={form.address} onChange={(e) => set('address', e.target.value)} /></label>
         <label className="field"><span>Emergency contact name</span>
-          <input value={form.emergency_contact_name} onChange={(e) => set('emergency_contact_name', e.target.value)} /></label>
+          <input name="emergency_contact_name" autoComplete="off" value={form.emergency_contact_name} onChange={(e) => set('emergency_contact_name', e.target.value)} /></label>
         <label className="field"><span>Emergency contact phone</span>
-          <input value={form.emergency_contact_phone} onChange={(e) => set('emergency_contact_phone', e.target.value)} /></label>
+          <input name="emergency_contact_phone" autoComplete="off" type="tel" value={form.emergency_contact_phone} onChange={(e) => set('emergency_contact_phone', e.target.value)} /></label>
       </div>
       <label className="field"><span>Medical history notes</span>
         <textarea rows={3} value={form.medical_history_notes} onChange={(e) => set('medical_history_notes', e.target.value)} /></label>

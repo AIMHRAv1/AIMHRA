@@ -63,9 +63,9 @@ class AssessmentSerializer(serializers.ModelSerializer):
                 )
         sys_bp = attrs.get("systolic_bp")
         dia_bp = attrs.get("diastolic_bp")
-        if sys_bp is not None and dia_bp is not None and dia_bp > sys_bp:
+        if sys_bp is not None and dia_bp is not None and dia_bp >= sys_bp:
             raise serializers.ValidationError(
-                {"diastolic_bp": "Diastolic blood pressure cannot exceed systolic blood pressure."}
+                {"diastolic_bp": "Diastolic blood pressure must be lower than systolic blood pressure."}
             )
         return attrs
 

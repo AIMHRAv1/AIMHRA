@@ -216,6 +216,8 @@ class AuthFlowTests(TestCase):
             {
                 "username": "createdworker",
                 "email": "createdworker@test.com",
+                "full_name": "Created Worker",
+                "phone": "+9779800000000",
                 "password": "Str0ng!Pass1",
                 "role": "HEALTHCARE_WORKER",
             },
@@ -224,6 +226,10 @@ class AuthFlowTests(TestCase):
         )
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()["role"], "HEALTHCARE_WORKER")
+        worker = User.objects.get(username="createdworker")
+        self.assertEqual(worker.full_name, "Created Worker")
+        self.assertEqual(worker.phone, "+9779800000000")
+        self.assertEqual(worker.email, "createdworker@test.com")
 
     def test_admin_can_create_healthcare_worker_with_photo(self):
         from io import BytesIO

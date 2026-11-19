@@ -12,8 +12,8 @@ const FIELDS = [
   { name: 'age', label: 'Age (years)', min: 14, max: 55, step: 1, hint: 'Average range: 18–35 years.' },
   { name: 'body_temperature', label: 'Body temperature (°F)', min: 95, max: 106, step: 0.1, hint: 'Average range: 97–99.5 °F.' },
   { name: 'heart_rate', label: 'Heart rate (bpm)', min: 40, max: 200, step: 1, hint: 'Average range: 60–100 bpm.' },
-  { name: 'systolic_bp', label: 'Systolic blood pressure (mm Hg)', min: 70, max: 250, step: 1, hint: 'Average range: 90–139 mm Hg.' },
-  { name: 'diastolic_bp', label: 'Diastolic blood pressure (mm Hg)', min: 40, max: 150, step: 1, hint: 'Average range: 60–89 mm Hg.' },
+  { name: 'systolic_bp', label: 'Systolic blood pressure (mm Hg)', min: 70, max: 180, step: 1, hint: 'Average range: 90–139 mm Hg.' },
+  { name: 'diastolic_bp', label: 'Diastolic blood pressure (mm Hg)', min: 40, max: 120, step: 1, hint: 'Average range: 60–89 mm Hg.' },
   { name: 'bmi', label: 'BMI (kg/m²)', min: 12, max: 60, step: 0.1, hint: 'Average range: 18.5–24.9 kg/m².' },
   { name: 'hba1c', label: 'HbA1c (%)', min: 3.98, max: 7.64, step: 0.01, hint: 'Average range: 4.0–5.6%.' },
   { name: 'fasting_glucose', label: 'Fasting glucose (mg/dL)', min: 36, max: 360.4, step: 0.1, hint: 'Average range: 70–99 mg/dL.' },
@@ -78,7 +78,35 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
     form.visit_date,
   )
 
-  function set(k, v) { setForm((f) => ({ ...f, [k]: v })) }
+  function set(k, v) {
+    setForm((f) => ({ ...f, [k]: v }))
+    const field = FIELDS.find((item) => item.name === k)
+    if (field) {
+      const value = Number(v)
+      const message = v === '' || !Number.isFinite(value)
+        ? undefined
+        : value < field.min
+          ? 'Too low.'
+          : value > field.max
+            ? 'Too high.'
+            : field.step === 1 && !Number.isInteger(value)
+              ? 'Enter a whole number.'
+              : undefined
+      setErrors((current) => ({ ...current, [k]: message }))
+    } else if (k === 'gestational_week') {
+      const value = Number(v)
+      const message = v === ''
+        ? undefined
+        : value < 1
+          ? 'Too low.'
+          : value > 45
+            ? 'Too high.'
+            : !Number.isInteger(value)
+              ? 'Enter a whole number.'
+              : undefined
+      setErrors((current) => ({ ...current, gestational_week: message }))
+    }
+  }
 
   // --- OCR scan mode: pre-fill only; the operator reviews and confirms. ---
   function pickScanFile(file) {
@@ -153,19 +181,39 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
   function validate() {
     const errs = {}
     if (!form.visit_date) errs.visit_date = 'Visit date is required.'
+    else if (form.visit_date > new Date().toISOString().slice(0, 10)) {
+      errs.visit_date = 'Visit date cannot be in the future.'
+    }
     for (const f of FIELDS) {
       const fieldValue = f.name === 'age' && ageIsCalculated ? calculatedAge : form[f.name]
       const v = parseFloat(fieldValue)
-      if (fieldValue === '' || fieldValue == null || Number.isNaN(v)) errs[f.name] = 'This field is required.'
-      else if (v < f.min || v > f.max) errs[f.name] = `Must be between ${f.min} and ${f.max}.`
+      if (fieldValue === '' || fieldValue == null || !Number.isFinite(v)) errs[f.name] = 'This field is required.'
+      else if (v < f.min) errs[f.name] = 'Too low.'
+      else if (v > f.max) errs[f.name] = 'Too high.'
+      else if (f.step === 1 && !Number.isInteger(v)) errs[f.name] = 'Enter a whole number.'
     }
-    if (form.gestational_week !== '' && (form.gestational_week < 1 || form.gestational_week > 45)) {
-      errs.gestational_week = 'Week must be 1–45.'
+    const gestationalWeek = form.gestational_week === '' ? null : Number(form.gestational_week)
+    if (gestationalWeek !== null && Number.isFinite(gestationalWeek)) {
+      if (gestationalWeek < 1) errs.gestational_week = 'Too low.'
+      else if (gestationalWeek > 45) errs.gestational_week = 'Too high.'
+      else if (!Number.isInteger(gestationalWeek)) errs.gestational_week = 'Enter a whole number.'
+    } else if (gestationalWeek !== null) {
+      errs.gestational_week = 'Enter a valid whole number.'
     }
-    if (parseFloat(form.diastolic_bp) > parseFloat(form.systolic_bp)) {
-      errs.diastolic_bp = 'Diastolic cannot exceed systolic.'
+    if (Number.isFinite(Number(form.diastolic_bp)) && Number.isFinite(Number(form.systolic_bp))
+      && Number(form.diastolic_bp) >= Number(form.systolic_bp)) {
+      errs.diastolic_bp = 'Diastolic pressure must be lower than systolic pressure.'
     }
     setErrors(errs)
+    if (Object.keys(errs).length > 0) {
+      const invalidFields = Object.keys(errs).map((key) => (
+        FIELDS.find((field) => field.name === key)?.label || (key === 'gestational_week' ? 'Gestational week' : key)
+      ))
+      setError({
+        code: 'VALIDATION_ERROR',
+        message: `Please correct the highlighted fields before submitting: ${invalidFields.join(', ')}.`,
+      })
+    }
     return Object.keys(errs).length === 0
   }
 
@@ -269,7 +317,7 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
           )}
 
           <div className={mode === 'scan' && scan.result ? 'scan-layout' : ''}>
-            <form className="card" onSubmit={onSubmit} noValidate>
+            <form className="card" onSubmit={onSubmit} noValidate autoComplete="off">
               {error && <div className="alert alert-error" role="alert">{error.message}</div>}
               <h2 className="section-title">New assessment — {patientLabel || 'patient'}</h2>
               <div className="grid-2">
@@ -310,6 +358,7 @@ export default function AssessmentPanel({ patient, onViewHistory, onAskAssistant
                       </span>
                       <input type="number" inputMode="decimal" min={f.min} max={f.max} step={f.step}
                              value={fieldValue} onChange={(e) => set(f.name, e.target.value)}
+                             aria-invalid={Boolean(errors[f.name])}
                              readOnly={ageIsCalculated && f.name === 'age'} required />
                       {f.hint && <small className="field-hint">{f.hint}</small>}
                       {scanWarn(scan.result, f.name, applySuggestion)}

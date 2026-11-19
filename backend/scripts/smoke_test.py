@@ -159,8 +159,10 @@ check("report PDF downloads", r.status_code == 200 and r["Content-Type"] == "app
 # --- models API ---
 r = c.get("/api/models/compare/", **auth)
 compare = J(r)
-check("model comparison lists both", {m["model"] for m in compare["models"]} == {"RandomForest", "XGBoost"})
-check("production is XGBoost", compare["production"] and compare["production"]["model"] == "XGBoost")
+check("model comparison lists trained classifiers",
+      {"RandomForest", "XGBoost", "DecisionTree", "ExtraTrees", "GradientBoosting", "LogisticRegression"}
+      <= {m["model"] for m in compare["models"]})
+check("production model is registered", bool(compare["production"] and compare["production"]["model"]))
 
 # --- audit log (admin only) ---
 r = c.get("/api/audit/", **admin_auth)

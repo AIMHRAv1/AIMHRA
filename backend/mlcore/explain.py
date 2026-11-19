@@ -29,6 +29,38 @@ def explain_prediction(bundle, vector):
 
         model = bundle["model"]
         features = bundle["features"]
+        if hasattr(model, "named_steps") and "logisticregression" in model.named_steps:
+            classifier = model.named_steps["logisticregression"]
+            scaler = model.named_steps.get("standardscaler")
+            coefficients = getattr(classifier, "coef_", None)
+            if coefficients is not None and scaler is not None:
+                predicted_class = bundle.get("_predicted_index", 0)
+                scaled_vector = scaler.transform(
+                    np.asarray(vector, dtype=np.float64).reshape(1, -1)
+                )[0]
+                contributions = np.asarray(coefficients)[predicted_class] * scaled_vector
+                order = np.argsort(-np.abs(contributions))[:8]
+                return {
+                    "method": "Standardized linear-model contribution",
+                    "target_class": bundle.get("_predicted_label"),
+                    "features": [
+                        {
+                            "feature": features[i],
+                            "label": FEATURE_LABELS.get(features[i], features[i]),
+                            "value": float(vector[i]),
+                            "impact": round(float(contributions[i]), 4),
+                            "direction": (
+                                "increasing" if contributions[i] > 0
+                                else "decreasing" if contributions[i] < 0
+                                else "neutral"
+                            ),
+                        }
+                        for i in order
+                    ],
+                    "disclaimer": EXPLANATION_DISCLAIMER,
+                    "note": "Contributions are to the predicted class score, not medical causes.",
+                }
+
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(np.asarray(vector, dtype=np.float64).reshape(1, -1))
 

@@ -69,8 +69,11 @@ created by an admin via the frontend **Admin → Users** page, the API
 (`POST /api/auth/users/`), or Django admin. They start as
 `HEALTHCARE_WORKER`s.
 
-**Train the ML models** — trained model files (`backend/ml_artifacts/`) are
-gitignored, so a fresh clone has none. The dataset is included
+**Train the ML models** — trains and compares Random Forest, XGBoost, Decision
+Tree, Extra Trees, Gradient Boosting, and Logistic Regression classifiers.
+The best model is selected using validation metrics, prioritizing high-risk
+recall; held-out test results are reported separately. Trained model files
+(`backend/ml_artifacts/`) are gitignored, so a fresh clone has none. The dataset is included
 (`backend/data/Mathernal_Risk.csv`):
 
 ```bash

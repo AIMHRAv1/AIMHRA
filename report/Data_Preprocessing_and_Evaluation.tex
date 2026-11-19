@@ -1,0 +1,145 @@
+\section{Data Preprocessing}
+
+The AI-Assisted Maternal Health Risk Screening System is trained using one
+dataset, \texttt{Mathernal\_Risk.csv}. It contains 6,103 records and three
+target classes: Low risk, Mid risk, and High risk. The model uses eight
+numerical features: age, body temperature, heart rate, systolic blood
+pressure, diastolic blood pressure, body mass index (BMI), HbA1c, and
+fasting glucose. Patient names and identifiers are excluded from the model
+features.
+
+\subsection{Data Validation and Cleaning}
+
+Before training, the dataset is checked for the expected columns, valid
+risk labels, and numeric feature values. Exact duplicate records are
+removed. Records outside configured physiological plausibility ranges are
+also removed; these ranges are intended to identify implausible values,
+not to act as clinical thresholds.
+
+Near-duplicate records are grouped using their feature values rounded to
+whole numbers. Records in the same group are kept together when the data
+is divided into training, validation, and test sets. This reduces the
+chance that near-identical records appear in both training and test data
+and inflate the measured performance.
+
+\subsection{Missing Values and Feature Scaling}
+
+The supplied dataset contains no missing feature values. The preprocessing
+pipeline includes median imputation, with medians fitted using the training
+data only and saved for use during prediction. Imputation is not performed
+separately for each risk class.
+
+Min--Max normalization is not applied to all features. Tree-based models
+use the measurements without scaling. Logistic Regression uses
+standardization within its model pipeline. The same saved preprocessing
+steps are applied to new inputs.
+
+\subsection{Class Labels and Class Imbalance}
+
+The target labels are encoded consistently as Low risk, Mid risk, and
+High risk. The supplied dataset is approximately balanced across the
+three classes. SMOTE is not used. Class weights are used by selected
+classifiers.
+
+No additional derived clinical features are introduced for model training.
+The system uses the eight measurements listed above as model inputs.
+Symptoms, assessment notes, and patient-record information are handled
+separately by the system's rules and advisory workflows.
+
+\subsection{Data Limitations}
+
+The dataset's risk labels are supplied by the source dataset, but the
+criteria and process used to assign those labels are undocumented. In
+addition, the glucose column headers do not consistently match the
+magnitudes of their values. The values are used as supplied, and the
+dataset validation checks their expected ranges. These limitations should
+be considered when interpreting model results.
+
+\section{Evaluation Metrics}
+
+The training pipeline compares six classifiers: Random Forest, XGBoost,
+Decision Tree, Extra Trees, Gradient Boosting, and Logistic Regression.
+The cleaned data is divided into approximately 70\% training, 15\%
+validation, and 15\% test data using a group-aware, approximately
+stratified split. The validation data is used to select the production
+model. The held-out test data is used to report model performance.
+
+\subsection{Classification Performance Metrics}
+
+Model performance is evaluated using accuracy, macro-averaged precision,
+macro-averaged recall, macro-averaged F1-score, High-risk recall, a
+confusion matrix, and one-vs-rest macro ROC-AUC. Macro-averaging gives
+equal weight to each risk class. High-risk recall is reported separately
+to show how many records labelled High risk in the test data were
+identified as High risk by the model.
+
+Table~\ref{tab:model-performance} shows the test-set results from the
+current training run. XGBoost was selected as the production model using
+validation metrics, with High-risk recall prioritized in model selection.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Classifier performance on the held-out test split}
+\label{tab:model-performance}
+\begin{tabular}{lrrrrr}
+\hline
+Model & Accuracy & Macro precision & Macro recall & Macro F1 & High-risk recall \\
+\hline
+Random Forest       & 99.01\% & 99.02\% & 99.01\% & 99.01\% & 98.03\% \\
+XGBoost             & 99.78\% & 99.78\% & 99.78\% & 99.78\% & 99.67\% \\
+Decision Tree       & 97.80\% & 97.82\% & 97.81\% & 97.81\% & 96.05\% \\
+Extra Trees         & 97.36\% & 97.40\% & 97.37\% & 97.36\% & 94.41\% \\
+Gradient Boosting   & 99.23\% & 99.23\% & 99.23\% & 99.23\% & 98.36\% \\
+Logistic Regression & 57.32\% & 56.98\% & 57.43\% & 56.41\% & 45.39\% \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Prediction Probabilities and Explanations}
+
+The model returns a probability for each risk class. The system's
+confidence score is the largest of the three class probabilities:
+
+\begin{equation}
+    \text{Confidence} =
+    \max(P_{\text{Low}},\, P_{\text{Mid}},\, P_{\text{High}})
+    \label{eq:confidence}
+\end{equation}
+
+This score represents the model's predicted probability and should not
+be interpreted as medical certainty or a diagnosis. The training
+evaluation also calculates probability-calibration measures, including
+the multiclass Brier score and expected calibration error.
+
+The system provides feature-contribution explanations. Tree-based models
+use SHAP where available, while Logistic Regression uses linear-model
+contributions. These explanations describe how features contributed to
+the model's prediction; they do not establish medical causes.
+
+\subsection{Rules, Alerts, and Advisory Generation}
+
+The system's clinical rules engine evaluates assessment measurements and
+selected symptoms separately from the machine-learning classifier. Its
+alerts are distinct from the model's predicted risk class.
+
+The advisory workflow uses relevant assessment and patient-record
+information together with passages retrieved from the system's knowledge
+base. It uses a locally configured Ollama model when available and has an
+offline knowledge-based fallback. The system does not use Gemini to
+generate advisories.
+
+\subsection{Interpretation and Limitations of Results}
+
+The metrics in Table~\ref{tab:model-performance} measure agreement with
+the supplied dataset's labels on an internal held-out test split. Because
+the source and clinical criteria for those labels are undocumented, these
+results do not establish clinical validity, performance on other
+populations, or suitability for clinical decision-making. External
+evaluation using clinically reviewed data would be needed to assess
+those properties.
+
+Cosine similarity for advisory text, a combined System Performance Score
+(SPS), and a Referral Match Score (RMS) are not currently calculated by
+the system. They should only be described as future evaluation measures
+if they are planned for later implementation.

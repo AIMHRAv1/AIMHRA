@@ -161,9 +161,36 @@ class AdvisoryPipelineTests(TestCase):
         self.assertEqual(response.status_code, 201, response.content)
         advisory = response.json()["data"]["advisory"]
         self.assertEqual(advisory["risk_level"], "high risk")
-        self.assertEqual(advisory["rules_category"], "HIGH_CONCERN")
+        self.assertEqual(advisory["rules_category"], "NORMAL")
+        self.assertEqual(advisory["advisory_category"], "HIGH_CONCERN")
         self.assertIn("classified this assessment as **high risk**", advisory["content"])
         self.assertIn("model classified this assessment as high risk", generate.call_args.args[0])
+
+    def test_high_concern_rule_is_distinct_from_low_model_risk_and_not_emergency(self):
+        _data, assessment = self._create_assessment(
+            self.profile,
+            {**VITALS, "systolic_bp": 145, "diastolic_bp": 92},
+        )
+        prediction = assessment.prediction
+        prediction.risk_level = "low risk"
+        prediction.probability = 0.87
+        prediction.save(update_fields=["risk_level", "probability"])
+
+        with (
+            patch("advisory.services.rag.retrieve_context", return_value={"chunks": []}),
+            patch("advisory.services.generate_answer", return_value=("Care guidance.", "local_llm")),
+        ):
+            response = self._generate(assessment.id)
+
+        self.assertEqual(response.status_code, 201, response.content)
+        advisory = response.json()["data"]["advisory"]
+        self.assertEqual(advisory["risk_level"], "low risk")
+        self.assertEqual(advisory["rules_category"], "HIGH_CONCERN")
+        self.assertEqual(advisory["advisory_category"], "HIGH_CONCERN")
+        self.assertEqual(advisory["rule_findings"][0]["id"], "HC-BP-SYS")
+        self.assertIn("Separate rule check: High Concern", advisory["content"])
+        self.assertNotIn("do not wait", advisory["content"].lower())
+        self.assertNotEqual(advisory["generation_mode"], "escalation")
 
     def test_advisory_generator_receives_assessment_notes_symptoms_and_measurements(self):
         _data, assessment = self._create_assessment(

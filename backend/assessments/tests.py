@@ -1,7 +1,7 @@
 """Assessment workflow tests: validation, permissions, isolation, rule engine,
 trends. Patients are standalone records owned/assigned to healthcare workers."""
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 from django.test import TestCase
 from django.urls import reverse
@@ -286,7 +286,13 @@ class AssessmentAPITests(AuthMixin, TestCase):
 
     def test_out_of_range_values_rejected(self):
         self.auth(self.worker)
-        for field, value in [("age", 300), ("heart_rate", 999), ("systolic_bp", -5)]:
+        for field, value in [
+            ("age", 300),
+            ("body_temperature", 110),
+            ("heart_rate", 999),
+            ("systolic_bp", 200),
+            ("diastolic_bp", 130),
+        ]:
             r = self.client.post(
                 "/api/assessments/",
                 {**VALID_PAYLOAD, "patient": self.profile.id, field: value},
@@ -300,6 +306,23 @@ class AssessmentAPITests(AuthMixin, TestCase):
         payload = {**VALID_PAYLOAD, "patient": self.profile.id, "systolic_bp": 100, "diastolic_bp": 120}
         r = self.client.post("/api/assessments/", payload, content_type="application/json")
         self.assertEqual(r.status_code, 400)
+
+    def test_diastolic_equal_to_systolic_rejected(self):
+        self.auth(self.worker)
+        payload = {**VALID_PAYLOAD, "patient": self.profile.id, "systolic_bp": 100, "diastolic_bp": 100}
+        r = self.client.post("/api/assessments/", payload, content_type="application/json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_age_must_match_patient_date_of_birth(self):
+        self.auth(self.worker)
+        self.profile.date_of_birth = date(2000, 1, 1)
+        self.profile.save(update_fields=["date_of_birth"])
+        payload = {**VALID_PAYLOAD, "patient": self.profile.id, "age": 28}
+        response = self.client.post(
+            "/api/assessments/", payload, content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("age", response.json()["error"]["details"])
 
     def test_unknown_symptom_rejected(self):
         self.auth(self.worker)

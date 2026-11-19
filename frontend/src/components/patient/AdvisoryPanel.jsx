@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { advisoryService, assessmentService } from '../../services/auth'
 import { apiError } from '../../api/client'
-import { CategoryBadge, Disclaimer, EmptyState, ErrorState, Loading, MarkdownLite } from '../ui'
+import { CategoryBadge, Disclaimer, EmptyState, ErrorState, Loading, MarkdownLite, RiskBadge } from '../ui'
 
 /**
  * Care advisory for one assessment — same pipeline as the chatbot
@@ -78,10 +78,24 @@ export function AdvisoryCard({ assessmentId, category, autoGenerate = false }) {
       {error && <ErrorState error={error} onRetry={load} />}
       {advisory ? (
         <div className="stack">
-          <p className="muted small">
-            <CategoryBadge category={advisory.rules_category || category} /> · risk: {advisory.risk_level} ·
-            {' '}generated {new Date(advisory.created_at).toLocaleString()}
-          </p>
+          <div className="stack">
+            <p className="muted small">
+              <b>Model estimate:</b> <RiskBadge level={advisory.risk_level} />
+              {' '}<b>Independent rule check:</b> <CategoryBadge category={advisory.rules_category || category || 'NORMAL'} />
+              {' '}<b>Combined advisory level:</b> <CategoryBadge category={advisory.advisory_category || advisory.rules_category || 'NORMAL'} />
+            </p>
+            <p className="muted small">
+              The model estimate and rule check are separate results. A rule-check finding does not change the model's classification.
+              {' '}Generated {new Date(advisory.created_at).toLocaleString()}.
+            </p>
+            {advisory.rule_findings?.length > 0 && (
+              <ul className="rule-list">
+                {advisory.rule_findings.map((finding) => (
+                  <li key={finding.id}><code>{finding.id}</code> {finding.description}</li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div className={`msg msg-assistant${escalated ? ' msg-escalated' : ''}`}>
             {escalated && <div className="msg-escalation"><strong>Emergency warning</strong> — advice follows the warning below</div>}
             <div className="msg-content advisory-content"><MarkdownLite text={advisory.content} /></div>

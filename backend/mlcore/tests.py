@@ -2,8 +2,10 @@
 persistence, prediction shape, labels and explainability."""
 import numpy as np
 import pandas as pd
+from accounts.models import User
 from django.conf import settings
 from django.test import TestCase
+from rest_framework.test import APIClient
 
 from mlcore.constants import FEATURES, RISK_LEVELS, SAFE_FEATURES, LEAKAGE_FEATURES, UNUSED_FEATURES
 from mlcore.dataset import (
@@ -188,11 +190,64 @@ class TrainingAndPredictionTests(TestCase):
             self.assertLessEqual(m["f1_macro_ci95"]["low"], m["f1_macro"] + 1e-9)
             self.assertGreaterEqual(m["f1_macro_ci95"]["high"], m["f1_macro"] - 1e-9)
 
+    def test_training_includes_diverse_classifiers(self):
+        names = {result["name"] for result in self.outcome["results"]}
+        self.assertEqual(
+            names,
+            {
+                "RandomForest", "XGBoost", "DecisionTree", "ExtraTrees",
+                "GradientBoosting", "LogisticRegression",
+            },
+        )
+        for result in self.outcome["results"]:
+            self.assertEqual(len(result["test_metrics"]["per_class"]), len(RISK_LEVELS))
+
+    def test_logistic_regression_has_model_contributions(self):
+        from mlcore.explain import explain_prediction
+
+        result = next(r for r in self.outcome["results"] if r["name"] == "LogisticRegression")
+        bundle = result["bundle"]
+        preprocessor = Preprocessor.from_dict(bundle["preprocessor"])
+        vector = preprocessor.transform(np.array([list(VALID_INPUT.values())]))[0]
+        bundle["_predicted_index"] = 0
+        bundle["_predicted_label"] = RISK_LEVELS[0]
+
+        explanation = explain_prediction(bundle, vector)
+
+        self.assertEqual(explanation["method"], "Standardized linear-model contribution")
+        self.assertTrue(explanation["features"])
+        self.assertEqual(explanation["target_class"], RISK_LEVELS[0])
+
+    def test_model_comparison_lists_latest_classifier_families(self):
+        admin = User.objects.create_user(
+            username="model_compare_admin",
+            email="model_compare@example.com",
+            password="test-password",
+            role="ADMIN",
+        )
+        client = APIClient()
+        client.force_authenticate(user=admin)
+
+        response = client.get("/api/models/compare/")
+
+        self.assertEqual(response.status_code, 200)
+        comparison = response.json()["data"]
+        self.assertEqual(
+            {model["model"] for model in comparison["models"]},
+            {
+                "RandomForest", "XGBoost", "DecisionTree", "ExtraTrees",
+                "GradientBoosting", "LogisticRegression",
+            },
+        )
+
     def test_production_model_exists(self):
         from mlcore.registry import get_production_bundle
 
         bundle, row = get_production_bundle()
-        self.assertIn(bundle["model_name"], ("RandomForest", "XGBoost"))
+        self.assertIn(
+            bundle["model_name"],
+            {"RandomForest", "XGBoost", "DecisionTree", "ExtraTrees", "GradientBoosting", "LogisticRegression"},
+        )
         self.assertEqual(bundle["classes"], RISK_LEVELS)
 
     def test_prediction_shape_and_labels(self):
@@ -217,7 +272,10 @@ class TrainingAndPredictionTests(TestCase):
         from mlcore.registry import predict
 
         explanation = predict(VALID_INPUT)["explanation"]
-        self.assertIn(explanation["method"], ("SHAP (TreeExplainer)", "unavailable"))
+        self.assertIn(
+            explanation["method"],
+            ("SHAP (TreeExplainer)", "Standardized linear-model contribution", "unavailable"),
+        )
         if explanation["features"]:
             item = explanation["features"][0]
             self.assertIn(item["feature"], FEATURES)

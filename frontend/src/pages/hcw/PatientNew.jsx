@@ -9,7 +9,6 @@ const initial = {
   full_name: '', email: '', phone: '', address: '',
   photo: null,
   date_of_birth: '', blood_group: '', gestational_week_at_registration: '',
-  estimated_due_date: '',
   medical_history_notes: '', allergies: '',
   emergency_contact_name: '', emergency_contact_phone: '',
   obstetric_history_notes: '', current_medications: '', additional_notes: '',
@@ -38,7 +37,7 @@ export default function PatientNew() {
         setBusy(false)
         return
       }
-      for (const k of ['date_of_birth', 'estimated_due_date']) if (!payload[k]) payload[k] = null
+      if (!payload.date_of_birth) payload.date_of_birth = null
       for (const k of ['gestational_week_at_registration']) {
         payload[k] = payload[k] === '' || payload[k] == null ? null : Number(payload[k])
       }
@@ -75,7 +74,7 @@ export default function PatientNew() {
 
       {error && <div className="alert alert-error" role="alert">{error.message}</div>}
 
-      <form className="card" onSubmit={onSubmit} noValidate>
+      <form className="card" onSubmit={onSubmit} noValidate autoComplete="off">
         <div className="patient-form-heading">
           <WorkerAvatar name={form.full_name || 'Patient'} size={64} />
           <h2 className="section-title">Patient information</h2>
@@ -83,7 +82,7 @@ export default function PatientNew() {
         <div className="grid-2">
           <label className="field">
             <span>Full name</span>
-            <input value={form.full_name} onChange={(e) => set('full_name', e.target.value)} required />
+            <input name="patient_full_name" autoComplete="off" value={form.full_name} onChange={(e) => set('full_name', e.target.value)} required />
             {errors.full_name && <em className="field-error">{errors.full_name}</em>}
           </label>
           <label className="field">
@@ -93,12 +92,12 @@ export default function PatientNew() {
           </label>
           <label className="field">
             <span>Email</span>
-            <input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
+            <input name="patient_email" autoComplete="off" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
             {errors.email && <em className="field-error">{errors.email}</em>}
           </label>
           <label className="field">
             <span>Phone</span>
-            <input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+977 …" />
+            <input name="patient_phone" autoComplete="off" type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+977 …" />
           </label>
           <label className="field">
             <span>Address</span>
@@ -122,16 +121,12 @@ export default function PatientNew() {
             <input type="number" min={1} max={45} value={form.gestational_week_at_registration} onChange={(e) => set('gestational_week_at_registration', e.target.value)} />
           </label>
           <label className="field">
-            <span>Estimated due date</span>
-            <input type="date" value={form.estimated_due_date} onChange={(e) => set('estimated_due_date', e.target.value)} />
-          </label>
-          <label className="field">
             <span>Emergency contact name</span>
-            <input value={form.emergency_contact_name} onChange={(e) => set('emergency_contact_name', e.target.value)} />
+            <input name="emergency_contact_name" autoComplete="off" value={form.emergency_contact_name} onChange={(e) => set('emergency_contact_name', e.target.value)} />
           </label>
           <label className="field">
             <span>Emergency contact phone</span>
-            <input value={form.emergency_contact_phone} onChange={(e) => set('emergency_contact_phone', e.target.value)} />
+            <input name="emergency_contact_phone" autoComplete="off" type="tel" value={form.emergency_contact_phone} onChange={(e) => set('emergency_contact_phone', e.target.value)} />
           </label>
         </div>
 

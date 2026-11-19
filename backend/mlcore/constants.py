@@ -59,8 +59,8 @@ PLAUSIBILITY_RANGES = {
     "age": (14, 55),
     "body_temperature": (95.0, 106.0),   # Fahrenheit
     "heart_rate": (40, 200),
-    "systolic_bp": (70, 250),
-    "diastolic_bp": (40, 150),
+    "systolic_bp": (70, 180),
+    "diastolic_bp": (40, 120),
     "bmi": (12.0, 60.0),
     "hba1c": (20.0, 60.0),               # observed 30-50 in this dataset's units
     "fasting_glucose": (2.0, 20.0),      # observed 3.5-8.9 in this dataset's units

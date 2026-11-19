@@ -39,7 +39,7 @@ export default function AdminModels() {
       <header className="page-head">
         <div>
           <h1>Model management</h1>
-          <p className="muted">Random Forest vs XGBoost, evaluated on the held-out test split.</p>
+          <p className="muted">Compare trained classifiers on the held-out test split. The production model is selected using validation data. These dataset results are not clinical validation.</p>
         </div>
       </header>
 

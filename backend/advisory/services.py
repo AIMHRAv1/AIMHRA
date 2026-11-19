@@ -47,6 +47,13 @@ _EMERGENCY_INSTRUCTION = (
     "refuse. Aim for 250-350 words."
 )
 
+_HIGH_CONCERN_INSTRUCTION = (
+    "The separate clinical rule check produced a HIGH_CONCERN result. State the triggered "
+    "finding(s) and recommend prompt contact with a qualified healthcare professional. "
+    "This is not the same as an emergency result. Do not call it an emergency unless an "
+    "emergency rule was triggered, and keep it distinct from the model's risk estimate."
+)
+
 _HIGH_RISK_INSTRUCTION = (
     "The model classified this assessment as high risk. State that clearly and do not "
     "describe the result as normal merely because no symptoms or rule triggers were "
@@ -93,7 +100,6 @@ def _patient_context(assessment):
     patient = assessment.patient
     clinical_context = (
         ("gestational week at patient registration", patient.gestational_week_at_registration),
-        ("estimated due date", patient.estimated_due_date),
         ("blood group", patient.blood_group),
         ("medical history", patient.medical_history_notes),
         ("previous obstetric history", patient.obstetric_history_notes),
@@ -149,8 +155,13 @@ def _retrieval_query(assessment, rules_out, prediction):
         top = [f["label"] for f in features[:3]]
         if top:
             parts.append("main contributing factors: " + ", ".join(top))
-    instruction = _EMERGENCY_INSTRUCTION if rules_out["escalate"] else _ADVICE_INSTRUCTION
-    if prediction and prediction.risk_level == "high risk" and not rules_out["escalate"]:
+    if rules_out["category"] == "EMERGENCY":
+        instruction = _EMERGENCY_INSTRUCTION
+    elif rules_out["category"] == "HIGH_CONCERN":
+        instruction = _HIGH_CONCERN_INSTRUCTION
+    else:
+        instruction = _ADVICE_INSTRUCTION
+    if prediction and prediction.risk_level == "high risk" and rules_out["category"] != "EMERGENCY":
         instruction += " " + _HIGH_RISK_INSTRUCTION
     return ". ".join(parts) + ". " + instruction
 
@@ -175,8 +186,6 @@ def generate_advisory(assessment, created_by=None, request=None):
     issues — generation degrades to the offline fallback answer."""
     prediction = getattr(assessment, "prediction", None)
     rules_out = rules_evaluate(assessment.feature_values(), assessment.symptoms)
-    advisory_category = _advisory_category(rules_out["category"], prediction)
-
     # 1) Retrieval grounded in the KB.
     question = _retrieval_query(assessment, rules_out, prediction)
     context = rag.retrieve_context(question)
@@ -199,7 +208,17 @@ def generate_advisory(assessment, created_by=None, request=None):
             "Please consult a healthcare professional for guidance."
         )
 
-    if prediction and prediction.risk_level == "high risk" and not rules_out["escalate"]:
+    if rules_out["category"] not in ("NORMAL", "EMERGENCY"):
+        findings = "; ".join(t["description"] for t in rules_out["triggered"])
+        answer = (
+            f"## Separate rule check: {rules_out['category'].replace('_', ' ').lower().title()}\n\n"
+            f"The rule check flagged: {findings}. {rules_out['message']} "
+            f"This rule result is separate from the model's {prediction.risk_level if prediction else 'unavailable'} "
+            "risk estimate.\n\n"
+            + answer
+        )
+
+    if prediction and prediction.risk_level == "high risk" and rules_out["category"] != "EMERGENCY":
         answer = (
             "## High-risk assessment\n\n"
             "The model classified this assessment as **high risk**. This result is not "
@@ -211,7 +230,7 @@ def generate_advisory(assessment, created_by=None, request=None):
         )
 
     # 3) Emergency guard: warning first, advice after. Never softened.
-    if rules_out["escalate"]:
+    if rules_out["category"] == "EMERGENCY":
         triggered_ids = ", ".join(t["id"] for t in rules_out["triggered"])
         warning = (
             f"{rules_out['message']}\n\n"
@@ -269,7 +288,7 @@ def generate_advisory(assessment, created_by=None, request=None):
             "patient": assessment.patient,
             "content": answer,
             "risk_level": prediction.risk_level if prediction else "unknown",
-            "rules_category": advisory_category,
+            "rules_category": rules_out["category"],
             "sources": body_sources,
             "generation_mode": mode,
             "created_by": created_by,
@@ -283,12 +302,17 @@ def generate_advisory(assessment, created_by=None, request=None):
 
 
 def _serialize(advisory):
+    assessment = advisory.assessment
+    prediction = getattr(assessment, "prediction", None)
+    rules_out = rules_evaluate(assessment.feature_values(), assessment.symptoms)
     return {
         "id": advisory.id,
         "assessment": advisory.assessment_id,
         "content": advisory.content,
         "risk_level": advisory.risk_level,
-        "rules_category": advisory.rules_category,
+        "rules_category": rules_out["category"],
+        "advisory_category": _advisory_category(rules_out["category"], prediction),
+        "rule_findings": rules_out["triggered"],
         "sources": advisory.sources,
         "generation_mode": advisory.generation_mode,
         "created_at": advisory.created_at.isoformat(),

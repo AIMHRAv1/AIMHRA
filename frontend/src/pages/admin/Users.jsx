@@ -168,17 +168,17 @@ export default function AdminUsers() {
       </section>
 
       {createRole && (
-        <form className="card" onSubmit={createUser}>
+        <form className="card" onSubmit={createUser} autoComplete="off">
           <div className="page-head">
             <h2 className="section-title">Create {createRole === 'ADMIN' ? 'administrator' : 'healthcare worker'}</h2>
             <button type="button" className="btn btn-ghost" onClick={() => setCreateRole(null)}>Cancel</button>
           </div>
           <div className="grid-2">
-            <label className="field"><span>Username</span><input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} required /></label>
-            <label className="field"><span>Email</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
-            <label className="field"><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
-            <label className="field"><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
-            <label className="field"><span>Password</span><input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required autoComplete="new-password" /></label>
+            <label className="field"><span>Username</span><input name="account_username" autoComplete="username" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} required /></label>
+            <label className="field"><span>Email</span><input name="account_email" autoComplete="email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
+            <label className="field"><span>Full name</span><input name="account_full_name" autoComplete="name" value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
+            <label className="field"><span>Phone</span><input name="account_phone" autoComplete="tel" type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+            <label className="field"><span>Password</span><input name="password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required autoComplete="new-password" /></label>
             {createRole === 'HEALTHCARE_WORKER' && (
               <label className="field">
                 <span>Profile photo (optional)</span>

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 
 from accounts.utils import user_photo_url
 from patients.models import PatientAssignment, PatientProfile
@@ -10,7 +11,7 @@ from patients.models import PatientAssignment, PatientProfile
 # still follow history, trends and reports.
 PII_FIELDS = [
     "full_name", "photo", "photo_url", "email", "phone", "address", "date_of_birth", "blood_group",
-    "gestational_week_at_registration", "estimated_due_date",
+    "gestational_week_at_registration",
     "medical_history_notes", "allergies", "emergency_contact_name",
     "emergency_contact_phone", "obstetric_history_notes", "current_medications",
     "additional_notes",
@@ -42,7 +43,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         fields = [
             "id", "patient_code", "full_name", "photo", "photo_url", "email", "phone", "address",
             "date_of_birth", "blood_group", "gestational_week_at_registration",
-            "estimated_due_date", "medical_history_notes",
+            "medical_history_notes",
             "allergies", "emergency_contact_name", "emergency_contact_phone",
             "obstetric_history_notes", "current_medications", "additional_notes",
             "created_by", "created_by_name", "is_active", "archived_at",
@@ -111,6 +112,11 @@ class PatientProfileSerializer(serializers.ModelSerializer):
     def validate_gestational_week_at_registration(self, value):
         if value is not None and not (1 <= value <= 45):
             raise serializers.ValidationError("Gestational week must be between 1 and 45.")
+        return value
+
+    def validate_date_of_birth(self, value):
+        if value and value > timezone.localdate():
+            raise serializers.ValidationError("Date of birth cannot be in the future.")
         return value
 
     def validate_blood_group(self, value):

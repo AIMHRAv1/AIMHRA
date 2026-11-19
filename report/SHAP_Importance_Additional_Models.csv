@@ -1,0 +1,33 @@
+Model,Feature,Low-risk %,Mid-risk %,High-risk %
+Decision Tree,Age,6.14,3.52,4.47
+Decision Tree,Body temperature,24.06,22.16,10.52
+Decision Tree,Heart rate,16.01,9.46,9.62
+Decision Tree,Systolic blood pressure,31.11,22.82,30.63
+Decision Tree,Diastolic blood pressure,7.24,13.10,13.15
+Decision Tree,BMI,1.93,3.68,4.34
+Decision Tree,HbA1c,5.89,5.95,6.41
+Decision Tree,Fasting glucose,7.62,19.31,20.86
+Extra Trees,Age,8.22,12.17,10.83
+Extra Trees,Body temperature,15.01,10.39,8.81
+Extra Trees,Heart rate,14.20,11.46,13.90
+Extra Trees,Systolic blood pressure,32.88,26.37,29.05
+Extra Trees,Diastolic blood pressure,7.29,7.01,6.47
+Extra Trees,BMI,1.94,6.26,6.80
+Extra Trees,HbA1c,7.44,8.96,7.75
+Extra Trees,Fasting glucose,13.02,17.39,16.39
+Gradient Boosting,Age,9.65,14.59,14.51
+Gradient Boosting,Body temperature,8.07,4.74,2.98
+Gradient Boosting,Heart rate,12.77,10.19,11.18
+Gradient Boosting,Systolic blood pressure,45.10,34.60,31.57
+Gradient Boosting,Diastolic blood pressure,3.74,2.57,2.09
+Gradient Boosting,BMI,2.92,7.26,9.77
+Gradient Boosting,HbA1c,7.98,8.00,7.74
+Gradient Boosting,Fasting glucose,9.76,18.06,20.16
+Logistic Regression,Age,20.51,25.71,8.97
+Logistic Regression,Body temperature,1.34,12.16,12.88
+Logistic Regression,Heart rate,13.11,7.72,24.93
+Logistic Regression,Systolic blood pressure,2.52,1.09,3.00
+Logistic Regression,Diastolic blood pressure,13.48,18.66,4.46
+Logistic Regression,BMI,4.77,2.71,4.99
+Logistic Regression,HbA1c,15.94,6.61,19.38
+Logistic Regression,Fasting glucose,28.35,25.34,21.39

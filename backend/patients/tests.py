@@ -62,6 +62,7 @@ class PatientApiTests(TestCase):
         data = r.json()["data"]
         self.assertTrue(data["patient_code"].startswith("P-"))
         self.assertEqual(data["full_name"], "Example Patient")
+        self.assertNotIn("estimated_due_date", data)
         self.assertEqual(data["created_by"], self.worker.id)
         self.assertEqual(data["current_medications"], "Folic acid 5mg")
         self.assertNotIn("gravidity", data)
@@ -113,6 +114,16 @@ class PatientApiTests(TestCase):
         )
         self.assertEqual(r.status_code, 201)
         self.assertTrue(r.json()["data"]["patient_code"].startswith("P-"))
+
+    def test_patient_date_of_birth_cannot_be_in_the_future(self):
+        response = self.client.post(
+            "/api/patients/",
+            {**VALID_PATIENT, "date_of_birth": "2099-01-01"},
+            content_type="application/json",
+            **self.worker_auth,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("date_of_birth", response.json()["error"]["details"])
 
     def test_patient_creation_is_audited(self):
         from audit.models import AuditLog

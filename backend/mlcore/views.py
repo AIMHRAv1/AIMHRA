@@ -24,7 +24,8 @@ class ModelComparisonView(APIView):
 
     def get(self, request):
         comparison = []
-        for name in ("RandomForest", "XGBoost"):
+        model_names = ModelVersion.objects.order_by().values_list("name", flat=True).distinct()
+        for name in model_names:
             row = ModelVersion.objects.filter(name=name).order_by("-trained_at").first()
             if row:
                 m = row.metrics or {}

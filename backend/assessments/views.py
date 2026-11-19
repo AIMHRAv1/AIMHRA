@@ -67,6 +67,19 @@ class AssessmentListCreateView(generics.ListCreateAPIView):
         patient = _resolve_patient(request)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if patient.date_of_birth:
+            visit_date = serializer.validated_data["visit_date"]
+            birth_date = patient.date_of_birth
+            expected_age = visit_date.year - birth_date.year - (
+                (visit_date.month, visit_date.day) < (birth_date.month, birth_date.day)
+            )
+            if serializer.validated_data["age"] != expected_age:
+                raise ApiError(
+                    "Age must match the patient's date of birth on the assessment date.",
+                    code="VALIDATION_ERROR",
+                    status_code=400,
+                    details={"age": f"Expected age is {expected_age} years."},
+                )
         # The service runs the full pipeline: predict -> SHAP -> rules -> persist.
         result = create_assessment(patient, serializer.validated_data, request=request)
         return ok(result, status=201)

@@ -1,4 +1,4 @@
-"""Train Random Forest and XGBoost, evaluate on the test split, register
+"""Train all configured classifiers, evaluate on the test split, register
 model versions, and promote the winner per the configured criterion.
 
 Usage:
@@ -19,7 +19,7 @@ from mlcore.training import train_all
 
 
 class Command(BaseCommand):
-    help = "Train RF + XGBoost, evaluate, persist artifacts and register model versions."
+    help = "Train and compare classifiers, persist artifacts and register model versions."
 
     def add_arguments(self, parser):
         parser.add_argument("--dataset", default=settings.DATASET_PATH)
@@ -51,9 +51,6 @@ class Command(BaseCommand):
         with transaction.atomic():
             for r in outcome["results"]:
                 is_winner = r is best
-                existing = ModelVersion.objects.filter(name=r["name"], status="PRODUCTION").exclude(
-                    version=f"v1.{stamp}"
-                )
                 version = f"v1.{stamp}"
                 ModelVersion.objects.filter(name=r["name"]).update(status="RETIRED")
                 row = ModelVersion.objects.create(

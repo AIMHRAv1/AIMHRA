@@ -144,7 +144,7 @@ export function ConfusionMatrix({ matrix }) {
   )
 }
 
-/** Metric comparison bars for RF vs XGB. */
+/** Metric comparison bars for the registered classifiers. */
 export function MetricBars({ models }) {
   const metrics = ['accuracy', 'precision', 'recall', 'f1', 'roc_auc', 'high_risk_recall']
   const labels = { accuracy: 'Accuracy', precision: 'Precision', recall: 'Recall', f1: 'F1', roc_auc: 'ROC-AUC', high_risk_recall: 'High-risk recall' }
@@ -153,7 +153,8 @@ export function MetricBars({ models }) {
     models.forEach((mod) => { row[mod.model] = mod[m] ?? 0 })
     return row
   })
-  const colors = { RandomForest: '#5b8c5a', XGBoost: '#1f6f8b' }
+  const palette = ['#5b8c5a', '#1f6f8b', '#a65d57', '#7967a8', '#c1872d', '#4b8f91']
+  const colors = Object.fromEntries(models.map((model, index) => [model.model, palette[index % palette.length]]))
   return (
     <ResponsiveContainer width="100%" height={280}>
       <BarChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -20 }}>

@@ -1,4 +1,4 @@
-"""Training pipeline: stratified split -> fit preprocessing -> train RF & XGB
+"""Training pipeline: stratified split -> fit preprocessing -> train classifiers
 -> evaluate on test only -> persist artifacts -> register versions.
 
 Class imbalance note: the dataset is close to balanced (32.8% / 33.5% / 33.7%),
@@ -14,7 +14,11 @@ from datetime import datetime, timezone
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import ExtraTreesClassifier, GradientBoostingClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
 
 from mlcore import evaluation as ev
@@ -58,8 +62,55 @@ def _make_xgboost():
     )
 
 
+def _make_decision_tree():
+    return DecisionTreeClassifier(
+        max_depth=12,
+        min_samples_leaf=4,
+        class_weight="balanced",
+        random_state=RANDOM_STATE,
+    )
+
+
+def _make_extra_trees():
+    return ExtraTreesClassifier(
+        n_estimators=400,
+        min_samples_leaf=2,
+        class_weight="balanced",
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+    )
+
+
+def _make_gradient_boosting():
+    return GradientBoostingClassifier(
+        n_estimators=200,
+        learning_rate=0.08,
+        max_depth=3,
+        subsample=0.9,
+        random_state=RANDOM_STATE,
+    )
+
+
+def _make_logistic_regression():
+    return make_pipeline(
+        StandardScaler(),
+        LogisticRegression(
+            class_weight="balanced",
+            max_iter=2000,
+            random_state=RANDOM_STATE,
+        ),
+    )
+
+
 def build_models():
-    return {"RandomForest": _make_random_forest(), "XGBoost": _make_xgboost()}
+    return {
+        "RandomForest": _make_random_forest(),
+        "XGBoost": _make_xgboost(),
+        "DecisionTree": _make_decision_tree(),
+        "ExtraTrees": _make_extra_trees(),
+        "GradientBoosting": _make_gradient_boosting(),
+        "LogisticRegression": _make_logistic_regression(),
+    }
 
 
 TRAIN_CONFIG = {
@@ -72,6 +123,10 @@ TRAIN_CONFIG = {
     "models": {
         "RandomForest": {"n_estimators": 400, "min_samples_leaf": 2, "class_weight": "balanced_subsample"},
         "XGBoost": {"n_estimators": 400, "learning_rate": 0.08, "max_depth": 6, "subsample": 0.9, "colsample_bytree": 0.8},
+        "DecisionTree": {"max_depth": 12, "min_samples_leaf": 4, "class_weight": "balanced"},
+        "ExtraTrees": {"n_estimators": 400, "min_samples_leaf": 2, "class_weight": "balanced"},
+        "GradientBoosting": {"n_estimators": 200, "learning_rate": 0.08, "max_depth": 3, "subsample": 0.9},
+        "LogisticRegression": {"class_weight": "balanced", "max_iter": 2000, "scaling": "standard"},
     },
     "evaluation": "validation split for model SELECTION; held-out test split for all reported metrics (with bootstrap 95% CIs); high-risk recall prioritized",
 }
@@ -93,8 +148,8 @@ def train_all(dataset_path, artifacts_dir, quick=False):
 
     X = feature_matrix(df)
     y = df["risk_level"].to_numpy()
-    # XGBoost requires integer labels. Encode into indices of RISK_LEVELS so
-    # probabilities always align with the canonical class list (both models).
+    # Encode labels into indices of RISK_LEVELS so every classifier's
+    # probability columns align with the canonical class list.
     y_enc = np.array([RISK_LEVEL_ORDER[v] for v in y])
 
     # Near-duplicate grouping (investigation result, ML_DATA_CARD.md): 91
@@ -140,6 +195,13 @@ def train_all(dataset_path, artifacts_dir, quick=False):
         builders = {
             "RandomForest": RandomForestClassifier(n_estimators=10, random_state=RANDOM_STATE, n_jobs=-1),
             "XGBoost": XGBClassifier(n_estimators=10, max_depth=3, tree_method="hist", random_state=RANDOM_STATE, eval_metric="mlogloss"),
+            "DecisionTree": DecisionTreeClassifier(max_depth=6, random_state=RANDOM_STATE),
+            "ExtraTrees": ExtraTreesClassifier(n_estimators=10, random_state=RANDOM_STATE, n_jobs=-1),
+            "GradientBoosting": GradientBoostingClassifier(n_estimators=10, random_state=RANDOM_STATE),
+            "LogisticRegression": make_pipeline(
+                StandardScaler(),
+                LogisticRegression(max_iter=500, random_state=RANDOM_STATE),
+            ),
         }
 
     for name, model in builders.items():
